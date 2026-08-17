@@ -17,9 +17,10 @@ const SUPPORTED: TestType[] = ['simple', 'boolean'];
 export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Promise<TestDef[]> {
   const out: TestDef[] = [];
 
-  const walk = async (url: string, sublistName: string | null): Promise<void> => {
-    const list = await fetchJson(url);
-
+  // Takes the already-fetched list rather than its url: a sublist is read once
+  // by the caller for its name, and re-fetching it here would double every
+  // round trip on a phone connection.
+  const walk = async (list: any, sublistName: string | null): Promise<void> => {
     for (const testUrl of list.tests ?? []) {
       const t = await fetchJson(testUrl);
       if (!SUPPORTED.includes(t.type)) {
@@ -39,10 +40,10 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
 
     for (const childUrl of list.test_lists ?? []) {
       const child = await fetchJson(childUrl);
-      await walk(childUrl, child.name);
+      await walk(child, child.name);
     }
   };
 
-  await walk(listUrl, null);
+  await walk(await fetchJson(listUrl), null);
   return out;
 }

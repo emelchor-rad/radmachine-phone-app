@@ -47,6 +47,18 @@ test('types are carried through', async () => {
   expect(out[2]).toMatchObject({ slug: 'cbct_b', type: 'simple' });
 });
 
+test('no url is fetched twice', async () => {
+  // Downloading a definition happens over a phone connection, often a poor
+  // one. Every redundant round trip is time the physicist spends waiting.
+  const seen: string[] = [];
+  const counting = async (url: string) => {
+    seen.push(url);
+    return payloads[url];
+  };
+  await flattenTestList('https://x/testlists/571/', counting);
+  expect(seen).toHaveLength(new Set(seen).size);
+});
+
 test('a test type v1 cannot render is rejected loudly', async () => {
   const withUpload: Record<string, any> = {
     ...payloads,
