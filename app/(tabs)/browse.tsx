@@ -130,10 +130,11 @@ export default function Catalogue() {
   const download = async (utc: CatalogueRow) => {
     const creds = await loadCredentials();
     if (!creds) return router.push('/connect');
-    // The credentials can have changed since these rows were fetched -- connect
-    // saves and routes straight back here, and this screen's focus effect does
-    // not re-browse. Resolving a previous tenant's object_id against a new host
-    // is the same wrong-list download by another route, so refuse it.
+    // The credentials can have changed since these rows were fetched: connect
+    // saves and navigates away, and coming back to this tab does not re-browse,
+    // so stale results can outlive the tenant they came from. Resolving a
+    // previous tenant's object_id against a new host is the same wrong-list
+    // download by another route, so refuse it.
     if (creds.baseUrl !== browsed.baseUrl) {
       setBrowsed(EMPTY);
       setMsg('These results came from a different instance. Press Browse again.');
