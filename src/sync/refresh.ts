@@ -46,16 +46,32 @@ export function buildScheduleRows(
   return out;
 }
 
+let inFlight: Promise<number | null> | null = null;
+
 /**
  * Refresh the schedule for every downloaded collection, in one pass.
  *
+ * Guarded like the outbox drain, and for the same reason: the connectivity and
+ * foreground events that trigger this fire within milliseconds of each other,
+ * so a caller arriving mid-run joins the run already going rather than starting
+ * a second pass over the same endpoints.
+ */
+export function refreshSchedule(nowIso: string): Promise<number | null> {
+  if (inFlight) return inFlight;
+  inFlight = runRefresh(nowIso).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+/**
  * Keeping scheduling apart from definitions means refreshing dates costs a few
  * paginated requests rather than a full re-download of every test in every
  * list. limit=200 matters: unittestcollections pages at 10 by default.
  *
  * Returns how many rows were stored, or null if there was nothing to do.
  */
-export async function refreshSchedule(nowIso: string): Promise<number | null> {
+async function runRefresh(nowIso: string): Promise<number | null> {
   const creds = await loadCredentials();
   if (!creds) return null;
 

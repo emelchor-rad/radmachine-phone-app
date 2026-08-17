@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Button, FlatList, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Crypto from 'expo-crypto';
-import { RadClient } from '../src/api/client';
-import { flattenTestList } from '../src/api/definitions';
+import { RadClient } from '../../src/api/client';
+import { flattenTestList } from '../../src/api/definitions';
 import {
   ALL,
   buildCatalogue,
@@ -12,12 +12,12 @@ import {
   type RawCollection,
   type RawContentType,
   type RawNamed,
-} from '../src/api/catalogue';
-import { listCollections, saveCollection, type Collection } from '../src/db/collections';
-import { createSession, listDrafts, type DraftSummary } from '../src/db/sessions';
-import { loadCredentials } from '../src/secure/credentials';
-import { nowStamp } from '../src/sync/time';
-import { Dropdown } from '../src/ui/Dropdown';
+} from '../../src/api/catalogue';
+import { listCollections, saveCollection, type Collection } from '../../src/db/collections';
+import { createSession, listDrafts, type DraftSummary } from '../../src/db/sessions';
+import { loadCredentials } from '../../src/secure/credentials';
+import { nowStamp } from '../../src/sync/time';
+import { Dropdown } from '../../src/ui/Dropdown';
 
 /** Everything one browse pass fetched, kept together. */
 type Browsed = {

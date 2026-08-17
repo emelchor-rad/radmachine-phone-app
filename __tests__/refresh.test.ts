@@ -1,4 +1,24 @@
-import { buildScheduleRows } from '../src/sync/refresh';
+import { buildScheduleRows, refreshSchedule } from '../src/sync/refresh';
+import { saveSchedule } from '../src/db/schedule';
+import { RadClient } from '../src/api/client';
+
+// Everything the refresh pass reaches for, stubbed: the guard is about how many
+// passes start, so no network and no database are needed to observe it.
+jest.mock('../src/secure/credentials', () => ({
+  loadCredentials: jest.fn(async () => ({ baseUrl: 'https://x/api', token: 't' })),
+}));
+jest.mock('../src/db/collections', () => ({
+  listCollections: jest.fn(async () => [{ utcUrl: 'utc/105' }]),
+}));
+jest.mock('../src/db/schedule', () => ({ saveSchedule: jest.fn(async () => {}) }));
+jest.mock('../src/api/client', () => ({
+  RadClient: jest.fn().mockImplementation(() => ({
+    getAll: jest.fn(async () => []),
+  })),
+}));
+
+const savedSchedule = saveSchedule as unknown as jest.Mock;
+const clientCtor = RadClient as unknown as jest.Mock;
 
 const utcs = [
   { url: 'utc/105', unit: 'unit/9', frequency: 'freq/1', due_date: '2026-08-18T08:57:00+02:00' },
@@ -57,4 +77,26 @@ test('a frequency url that resolves to nothing degrades to ad hoc, keeping the r
 
 test('downloading nothing yields no rows', () => {
   expect(buildScheduleRows(utcs, units, sites, freqs, new Set())).toEqual([]);
+});
+
+test('overlapping refreshes make one pass, and the guard clears afterwards', async () => {
+  // Leaving a bunker fires the connectivity and foreground events milliseconds
+  // apart, so this overlap is the normal case. The second caller must join the
+  // run already going rather than open a second pass over the same endpoints.
+  savedSchedule.mockClear();
+  clientCtor.mockClear();
+
+  const first = refreshSchedule('2026-08-17T09:00:00Z');
+  const second = refreshSchedule('2026-08-17T09:00:00Z');
+  const [a, b] = await Promise.all([first, second]);
+
+  // Both callers get an answer -- joining a run must not mean going unanswered.
+  expect(a).toBe(0);
+  expect(b).toBe(0);
+  expect(savedSchedule).toHaveBeenCalledTimes(1);
+  expect(clientCtor).toHaveBeenCalledTimes(1);
+
+  // And the guard is not a latch: once the pass is done, the next event refreshes.
+  await refreshSchedule('2026-08-17T09:05:00Z');
+  expect(savedSchedule).toHaveBeenCalledTimes(2);
 });
