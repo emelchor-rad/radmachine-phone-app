@@ -23,6 +23,11 @@ export type DraftSummary = {
   utcName: string | null;
   unitName: string | null;
   workStarted: string;
+  /**
+   * Outbox status for this session, when it somehow already has a payload
+   * waiting -- normally null. See the note in listDrafts.
+   */
+  outboxStatus: string | null;
 };
 
 /**
@@ -42,10 +47,14 @@ export type DraftSummary = {
  *   this function exists to close. Better a row with a null name that the
  *   worksheet can then explain than no row at all.
  *
- * - No exclusion for rows that are also in the outbox. finish() enqueues before
- *   it marks the session queued, so a failure between the two leaves a session
- *   that reads 'draft' and has a payload waiting. Listing it here is what makes
- *   that state recoverable rather than invisible.
+ * - No exclusion for rows that are also in the outbox, but their outbox status is
+ *   reported. finish() enqueues before it marks the session queued, so a failure
+ *   between the two leaves a session that reads 'draft' and has a payload
+ *   waiting. Hiding those would strand them; listing them without saying so
+ *   would be worse, because re-finishing one POSTs the same user_key, which the
+ *   server answers as a duplicate and the drain records as 'sent' -- so any
+ *   reading edited on the second pass is dropped without a word. The screen can
+ *   at least warn with this.
  *
  * work_started is 'YYYY-MM-DD HH:mm:ss', so ordering it as text is ordering it
  * chronologically. id breaks ties, only so the order is stable across calls.
@@ -53,9 +62,11 @@ export type DraftSummary = {
 export async function listDrafts(): Promise<DraftSummary[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<any>(
-    `SELECT s.id, s.utc_url, s.work_started, c.utc_name, c.unit_name
+    `SELECT s.id, s.utc_url, s.work_started, c.utc_name, c.unit_name,
+            o.status AS outbox_status
        FROM session s
        LEFT JOIN collection c ON c.utc_url = s.utc_url
+       LEFT JOIN outbox o ON o.session_id = s.id
       WHERE s.status = 'draft'
       ORDER BY s.work_started DESC, s.id`
   );
@@ -65,6 +76,7 @@ export async function listDrafts(): Promise<DraftSummary[]> {
     utcName: r.utc_name ?? null,
     unitName: r.unit_name ?? null,
     workStarted: r.work_started,
+    outboxStatus: r.outbox_status ?? null,
   }));
 }
 

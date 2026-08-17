@@ -75,16 +75,24 @@ function byUrl(rows: RawNamed[]): Record<string, string> {
   return Object.fromEntries(rows.map((r) => [r.url, r.name]));
 }
 
+export const TEST_LIST = 'qa.testlist';
+export const TEST_LIST_CYCLE = 'qa.testlistcycle';
+
 /**
- * url -> django model name, e.g. '.../contenttypes/2/' -> 'testlist'.
+ * url -> 'app_label.model', e.g. '.../contenttypes/2/' -> 'qa.testlist'.
  *
- * Rows missing either field are left out, so they fall through to `unresolved`
- * rather than being guessed at.
+ * The app label is carried deliberately rather than matching on the model name
+ * alone: a model named `testlist` in some other installed app would otherwise
+ * map to a downloadable row and be fetched from /qa/testlists/, which is the
+ * same wrong-list outcome by another route.
+ *
+ * A row missing either field maps to nothing, so its collections fall through to
+ * `unresolved` instead of being guessed at.
  */
-export function contentModels(types: RawContentType[]): Record<string, string> {
+export function contentTypeIds(types: RawContentType[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const t of types) {
-    if (t && t.url && t.model) out[t.url] = t.model;
+    if (t && t.url && t.app_label && t.model) out[t.url] = `${t.app_label}.${t.model}`;
   }
   return out;
 }
@@ -110,17 +118,29 @@ export function contentModels(types: RawContentType[]): Record<string, string> {
  */
 export function splitByContentType(
   cols: RawCollection[],
-  models: Record<string, string>
+  ids: Record<string, string>
 ): { lists: RawCollection[]; hidden: Hidden } {
   const lists: RawCollection[] = [];
   const hidden: Hidden = { cycles: 0, unresolved: 0 };
   for (const c of cols) {
-    const model = c.content_type ? models[c.content_type] : undefined;
-    if (model === 'testlist') lists.push(c);
-    else if (model === 'testlistcycle') hidden.cycles++;
+    const id = c.content_type ? ids[c.content_type] : undefined;
+    if (id === TEST_LIST) lists.push(c);
+    else if (id === TEST_LIST_CYCLE) hidden.cycles++;
     else hidden.unresolved++;
   }
   return { lists, hidden };
+}
+
+/**
+ * Where a collection's test list definition lives.
+ *
+ * Only ever call this with a row that came out of buildCatalogue. object_id is
+ * one half of a generic foreign key, so it is only a TEST LIST pk when the
+ * content type said so; for a cycle it is a cycle pk and this url resolves to an
+ * unrelated list that downloads perfectly happily.
+ */
+export function definitionUrl(row: CatalogueRow, baseUrl: string): string {
+  return `${baseUrl}/qa/testlists/${row.object_id}/`;
 }
 
 /** The line the user reads when something was withheld. '' when nothing was. */
@@ -133,7 +153,8 @@ export function hiddenNotice(h: Hidden): string {
   }
   if (h.unresolved) {
     parts.push(
-      `${h.unresolved} hidden — content type unknown, so the test list cannot be identified safely`
+      `${h.unresolved} ${h.unresolved === 1 ? 'collection' : 'collections'} hidden — ` +
+        'content type unknown, so the test list cannot be identified safely'
     );
   }
   return parts.length ? `${parts.join('. ')}.` : '';
@@ -152,7 +173,7 @@ export function buildCatalogue(input: CatalogueInput): CatalogueView {
   const freqNames = byUrl(input.frequencies);
   const { lists, hidden } = splitByContentType(
     input.collections,
-    contentModels(input.contentTypes)
+    contentTypeIds(input.contentTypes)
   );
 
   const rows: CatalogueRow[] = lists.map((c) => ({

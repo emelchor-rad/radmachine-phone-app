@@ -1,8 +1,11 @@
 import {
   ALL,
   NO_FREQ,
+  TEST_LIST,
+  TEST_LIST_CYCLE,
   buildCatalogue,
-  contentModels,
+  contentTypeIds,
+  definitionUrl,
   hiddenNotice,
   splitByContentType,
   type CatalogueInput,
@@ -114,11 +117,44 @@ test('an unresolvable content type is refused, not assumed to be a test list', (
 
 test('a content type row with no model name resolves nothing', () => {
   // Guessing from app_label alone, or from position in the list, would let this
-  // through. contentModels drops it, so its collections are refused.
-  expect(contentModels([{ url: CT_LIST, app_label: 'qa' }])).toEqual({});
+  // through. contentTypeIds drops it, so its collections are refused.
+  expect(contentTypeIds([{ url: CT_LIST, app_label: 'qa' }])).toEqual({});
   const v = view({ contentTypes: [{ url: CT_LIST, app_label: 'qa' }] });
   expect(v.rows).toEqual([]);
   expect(v.hidden).toEqual({ cycles: 0, unresolved: 4 });
+});
+
+test('a testlist model in some other app is not a qa test list', () => {
+  // Matching the model name alone would make this downloadable and fetch it from
+  // /qa/testlists/<object_id>/ -- the wrong-list bug by another route.
+  const v = view({
+    contentTypes: [
+      { url: CT_LIST, app_label: 'somethingelse', model: 'testlist' },
+      { url: CT_CYCLE, app_label: 'qa', model: 'testlistcycle' },
+    ],
+  });
+  expect(v.rows).toEqual([]);
+  expect(v.hidden).toEqual({ cycles: 1, unresolved: 3 });
+});
+
+test('contentTypeIds keys on the dotted app_label.model identity', () => {
+  expect(contentTypeIds(contentTypes)).toEqual({
+    [CT_LIST]: TEST_LIST,
+    [CT_CYCLE]: TEST_LIST_CYCLE,
+  });
+  expect(TEST_LIST).toBe('qa.testlist');
+  expect(TEST_LIST_CYCLE).toBe('qa.testlistcycle');
+});
+
+test('a content_type serialized as a bare pk resolves to nothing, not to a list', () => {
+  // A tenant whose serializer emits the integer instead of a hyperlink must not
+  // read as "plain test list". Refusing is the safe direction, and the notice
+  // says so.
+  const v = view({
+    collections: [col({ url: 'https://x/utc/1/', content_type: '2' as any })],
+  });
+  expect(v.rows).toEqual([]);
+  expect(v.hiddenNotice).toMatch(/content type unknown/);
 });
 
 test('no content types at all hides everything rather than downloading blind', () => {
@@ -129,8 +165,8 @@ test('no content types at all hides everything rather than downloading blind', (
 
 test('splitByContentType tallies without reordering the kept lists', () => {
   const { lists, hidden } = splitByContentType(collections, {
-    [CT_LIST]: 'testlist',
-    [CT_CYCLE]: 'testlistcycle',
+    [CT_LIST]: TEST_LIST,
+    [CT_CYCLE]: TEST_LIST_CYCLE,
   });
   expect(lists.map((c) => c.url)).toEqual([
     'https://x/utc/1/',
@@ -154,11 +190,11 @@ test('the notice pluralises cycles', () => {
 
 test('the notice names an unresolved content type separately', () => {
   expect(hiddenNotice({ cycles: 0, unresolved: 2 })).toBe(
-    '2 hidden — content type unknown, so the test list cannot be identified safely.'
+    '2 collections hidden — content type unknown, so the test list cannot be identified safely.'
   );
   expect(hiddenNotice({ cycles: 1, unresolved: 1 })).toBe(
     '1 cycle hidden — cycles are not supported yet. ' +
-      '1 hidden — content type unknown, so the test list cannot be identified safely.'
+      '1 collection hidden — content type unknown, so the test list cannot be identified safely.'
   );
 });
 
@@ -208,6 +244,36 @@ test('the sentinels cannot collide with a real url', () => {
 
 test('a stale filter naming a hidden cycle unit yields an empty list, not a crash', () => {
   expect(view({ unitFilter: U9 }).visible).toEqual([]);
+});
+
+test('a stale frequency filter no longer present yields an empty list', () => {
+  expect(view({ freqFilter: 'https://x/frequencies/gone/' }).visible).toEqual([]);
+});
+
+test('a collection with no unit is reachable only through All units', () => {
+  // There is no "No unit" option, so ALL is its one route in. Pre-existing
+  // behaviour, pinned here because it lives in a comment otherwise.
+  const orphan = [col({ url: 'https://x/utc/1/', name: 'orphan', unit: null })];
+  const v = view({ collections: orphan });
+  expect(v.unitOptions.map((o) => o.value)).toEqual([ALL]);
+  expect(v.visible.map((r) => r.name)).toEqual(['orphan']);
+});
+
+// --- the definition url ----------------------------------------------------
+
+test('the definition url is built from object_id, which survives onto the row', () => {
+  const v = view();
+  expect(v.rows[0].object_id).toBe(1);
+  expect(definitionUrl(v.rows[0], 'https://x/api')).toBe('https://x/api/qa/testlists/1/');
+});
+
+test('the cycle whose object_id would have collided never reaches a row', () => {
+  // utc/4 is a cycle with object_id 2 -- the pk of a real, unrelated test list.
+  // Nothing that buildCatalogue returns can produce that url.
+  const v = view();
+  expect(v.rows.map((r) => definitionUrl(r, 'https://x/api'))).not.toContain(
+    'https://x/api/qa/testlists/2/'
+  );
 });
 
 // --- dropdown options ------------------------------------------------------
