@@ -30,6 +30,13 @@ export function drainOutbox(): Promise<number> {
 /**
  * A duplicate user_key means an earlier attempt already reached the server;
  * we then GET by user_key to recover the session url instead of losing it.
+ *
+ * An auth outcome ends the pass. The row itself stays queued (see nextState --
+ * a bad token is fixable, a failed row is not), but the remaining rows are not
+ * even attempted: the credentials are now known to be bad, so the other POSTs
+ * would fail for the same reason, burning requests and backoff bumps on a link
+ * that is marginal by definition. They stay due and go out on the next pass,
+ * once the token has been replaced.
  */
 async function runDrain(): Promise<number> {
   const creds = await loadCredentials();
@@ -37,6 +44,8 @@ async function runDrain(): Promise<number> {
 
   const client = new RadClient(creds.baseUrl, creds.token);
   const rows = await dueRows(new Date().toISOString());
+
+  let processed = 0;
 
   for (const row of rows) {
     const attempts = row.attempts + 1;
@@ -67,7 +76,10 @@ async function runDrain(): Promise<number> {
         : null;
 
     await applyState(row.sessionId, state, attempts, nextAttempt);
+    processed += 1;
+
+    if (outcome.kind === 'auth') break;
   }
 
-  return rows.length;
+  return processed;
 }
