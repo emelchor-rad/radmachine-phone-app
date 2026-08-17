@@ -43,6 +43,14 @@ export default function Worksheet() {
     await update(slug, { value: raw === '' || !Number.isFinite(n) ? null : n });
   };
 
+  // Android's numeric keypad has no minus key, and four of the six numeric
+  // tests on the target list have a reference of 0 with a band of +/-1 mm --
+  // they record a deviation, so half the valid readings are negative.
+  const toggleSign = async (slug: string) => {
+    const cur = texts[slug] ?? '';
+    await updateNumber(slug, cur.startsWith('-') ? cur.slice(1) : `-${cur}`);
+  };
+
   const finish = async () => {
     const completed = nowStamp();
     await markCompleted(sessionId, completed);
@@ -71,12 +79,15 @@ export default function Worksheet() {
                 onValueChange={(b) => update(t.slug, { value: b })}
               />
             ) : (
-              <TextInput
-                keyboardType="numeric"
-                value={texts[t.slug] ?? ''}
-                onChangeText={(txt) => updateNumber(t.slug, txt)}
-                style={{ borderWidth: 1, padding: 8 }}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput
+                  keyboardType="numeric"
+                  value={texts[t.slug] ?? ''}
+                  onChangeText={(txt) => updateNumber(t.slug, txt)}
+                  style={{ borderWidth: 1, padding: 8, flex: 1 }}
+                />
+                <Button title="+/-" onPress={() => toggleSign(t.slug)} />
+              </View>
             )}
           </View>
         );

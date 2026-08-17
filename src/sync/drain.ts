@@ -4,13 +4,34 @@ import { applyState, dueRows } from '../db/outbox';
 import { loadCredentials } from '../secure/credentials';
 import { backoffMs, nextState } from './worker';
 
+let inFlight: Promise<number> | null = null;
+
 /**
  * Send every due row. Returns how many were processed.
  *
+ * Walking out of a bunker fires the connectivity and foreground events within
+ * milliseconds of each other, so overlapping calls are the normal case, not an
+ * edge case. A caller arriving mid-run joins the run already going instead of
+ * starting a second pass over the same rows -- so it reports that run's count,
+ * not a count of its own.
+ *
+ * The user_key guard already makes a double POST harmless at the server, but
+ * racing passes can still overwrite a recovered session url with null and
+ * double the traffic on a link that is marginal by definition.
+ */
+export function drainOutbox(): Promise<number> {
+  if (inFlight) return inFlight;
+  inFlight = runDrain().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+/**
  * A duplicate user_key means an earlier attempt already reached the server;
  * we then GET by user_key to recover the session url instead of losing it.
  */
-export async function drainOutbox(): Promise<number> {
+async function runDrain(): Promise<number> {
   const creds = await loadCredentials();
   if (!creds) return 0;
 
