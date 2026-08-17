@@ -69,6 +69,12 @@ export default function Dashboard() {
         <Dropdown label="Site" options={siteOptions} value={site} onSelect={setSite} />
       ) : null}
 
+      {/* One staleness line for the screen, not one per card: every card comes
+          from the same refresh, so repeating it would only add noise. */}
+      {rows.length > 0 ? (
+        <Text style={{ color: '#888', fontSize: 12 }}>{staleness(refreshed, now)}</Text>
+      ) : null}
+
       {msg ? <Text style={{ color: DANGER }}>{msg}</Text> : null}
 
       {unsent > 0 ? (
@@ -96,8 +102,6 @@ export default function Dashboard() {
           <Text style={{ color: c.overdueTotal > 0 ? DANGER : '#555' }}>
             {c.dueTotal} due or overdue
           </Text>
-          <Text style={{ color: '#888', fontSize: 12 }}>{staleness(refreshed, now)}</Text>
-
           {c.rows.map((r) => (
             <Pressable
               key={r.frequencyName}

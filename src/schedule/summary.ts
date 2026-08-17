@@ -28,9 +28,23 @@ export const ALL = '__all__';
 /** Sentinel for the ad-hoc bucket -- collections with no frequency. */
 export const NO_FREQUENCY = '__none__';
 
-const AD_HOC = 'Ad hoc';
+/** How the no-frequency bucket is labelled to the user. */
+export const AD_HOC = 'Ad hoc';
 
 const label = (r: ScheduleRow) => r.frequencyName ?? AD_HOC;
+
+/**
+ * Turn a frequency row's *display label* into the value `filterSchedule` wants.
+ *
+ * buildUnitCards emits labels for people to read; filterSchedule matches on
+ * sentinels. Without this translation, tapping the ad-hoc row on the dashboard
+ * shows a count and then opens an empty list -- it does not fail, it just
+ * quietly does the wrong thing. Keeping the mapping here means the label can
+ * change in one place without silently breaking the filter.
+ */
+export function frequencyFilterFor(label: string): string {
+  return label === AD_HOC ? NO_FREQUENCY : label;
+}
 
 /**
  * Group downloaded collections into one card per unit.

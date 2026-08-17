@@ -1,8 +1,10 @@
 import {
+  AD_HOC,
   ALL,
   NO_FREQUENCY,
   buildUnitCards,
   filterSchedule,
+  frequencyFilterFor,
   type ScheduleRow,
 } from '../src/schedule/summary';
 
@@ -117,6 +119,27 @@ test('filterSchedule narrows by unit and by frequency together', () => {
     row({ utcUrl: 'c', unitUrl: 'unit/10' }),
   ];
   expect(filterSchedule(rows, 'unit/9', 'Daily').map((r) => r.utcUrl)).toEqual(['a']);
+});
+
+test('a card label round-trips through the filter it opens', () => {
+  // The dashboard shows labels; the filter matches sentinels. Tapping a card
+  // row must land on exactly the rows that row counted -- for EVERY row it can
+  // produce, including the ad-hoc one.
+  const rows = [
+    row({ utcUrl: 'a' }),
+    row({ utcUrl: 'b', frequencyName: null, frequencyUrl: null, dueDate: null }),
+  ];
+  const card = buildUnitCards(rows, now, ALL)[0];
+
+  for (const r of card.rows) {
+    const matched = filterSchedule(rows, card.unitUrl, frequencyFilterFor(r.frequencyName));
+    expect(matched.length).toBeGreaterThan(0);
+  }
+});
+
+test('frequencyFilterFor maps the ad-hoc label to the sentinel and leaves others alone', () => {
+  expect(frequencyFilterFor(AD_HOC)).toBe(NO_FREQUENCY);
+  expect(frequencyFilterFor('Daily')).toBe('Daily');
 });
 
 test('the ad-hoc bucket is reachable through the frequency filter', () => {
