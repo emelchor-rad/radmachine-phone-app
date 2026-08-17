@@ -3,6 +3,7 @@
     "name": "radmachine-mobile",
     "slug": "radmachine-mobile",
     "version": "1.0.0",
+    "scheme": "radmachine",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
