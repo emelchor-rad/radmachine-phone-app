@@ -15,6 +15,59 @@ export async function createSession(
   );
 }
 
+/** One unfinished session, as the catalogue lists it. */
+export type DraftSummary = {
+  id: string;
+  utcUrl: string;
+  /** From the downloaded collection; null if that definition is no longer stored. */
+  utcName: string | null;
+  unitName: string | null;
+  workStarted: string;
+};
+
+/**
+ * Every session still sitting at status 'draft', newest first.
+ *
+ * This is the READING half of the "a killed app loses nothing" guarantee.
+ * createSession + setValue already persist every keystroke, but until something
+ * listed the drafts back, a session abandoned by the Android back gesture (or
+ * killed by the OS) was stranded: its readings were in SQLite with no screen
+ * able to name it.
+ *
+ * Two deliberate choices:
+ *
+ * - LEFT JOIN, not an inner join. If the collection row is gone -- deleted, or
+ *   the app reinstalled over a surviving database -- an inner join would drop
+ *   the draft from the list and strand it all over again, which is the exact bug
+ *   this function exists to close. Better a row with a null name that the
+ *   worksheet can then explain than no row at all.
+ *
+ * - No exclusion for rows that are also in the outbox. finish() enqueues before
+ *   it marks the session queued, so a failure between the two leaves a session
+ *   that reads 'draft' and has a payload waiting. Listing it here is what makes
+ *   that state recoverable rather than invisible.
+ *
+ * work_started is 'YYYY-MM-DD HH:mm:ss', so ordering it as text is ordering it
+ * chronologically. id breaks ties, only so the order is stable across calls.
+ */
+export async function listDrafts(): Promise<DraftSummary[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>(
+    `SELECT s.id, s.utc_url, s.work_started, c.utc_name, c.unit_name
+       FROM session s
+       LEFT JOIN collection c ON c.utc_url = s.utc_url
+      WHERE s.status = 'draft'
+      ORDER BY s.work_started DESC, s.id`
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    utcUrl: r.utc_url,
+    utcName: r.utc_name ?? null,
+    unitName: r.unit_name ?? null,
+    workStarted: r.work_started,
+  }));
+}
+
 export async function setValue(
   sessionId: string,
   slug: string,
