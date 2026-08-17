@@ -140,12 +140,17 @@ export default function Worksheet() {
     setSending(true);
     try {
       const completed = nowStamp();
-      await markCompleted(sessionId, completed);
       const payload = buildPayload(pending.defs, {
         ...pending.draft,
         workCompleted: completed,
       });
+      // Outbox first, session status second. The reverse order strands the
+      // session if enqueue throws: it would be marked 'queued' with nothing to
+      // send and nothing listing it as a draft either. This way the worst case
+      // is a queued payload whose session row still reads 'draft' -- visible in
+      // both places, which is recoverable, rather than invisible in both.
       await enqueue(sessionId, payload);
+      await markCompleted(sessionId, completed);
       setPending(null);
       router.replace('/queue');
     } catch (e: any) {
