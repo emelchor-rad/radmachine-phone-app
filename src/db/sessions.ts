@@ -80,6 +80,27 @@ export async function listDrafts(): Promise<DraftSummary[]> {
   }));
 }
 
+/**
+ * Which downloaded lists have a session that has not reached the server yet,
+ * keyed by collection url.
+ *
+ * Shown beside a list, never subtracted from a due count: the count reflects
+ * what the server knows, and a phone-side adjustment would make it correspond
+ * to nothing auditable.
+ */
+export async function listUnsentByUtc(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<any>(
+    `SELECT s.utc_url, o.status
+       FROM outbox o
+       JOIN session s ON s.id = o.session_id
+      WHERE o.status != 'sent'`
+  );
+  const out: Record<string, string> = {};
+  for (const r of rows) out[r.utc_url] = r.status;
+  return out;
+}
+
 export async function setValue(
   sessionId: string,
   slug: string,
