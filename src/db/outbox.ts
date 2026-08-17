@@ -34,6 +34,23 @@ export async function allRows(): Promise<OutboxRow[]> {
   return (await db.getAllAsync<any>(`SELECT * FROM outbox`)).map(toRow);
 }
 
+/**
+ * Put a stopped row back in the queue.
+ *
+ * `failed` is otherwise terminal, and the readings behind it are unreachable:
+ * dueRows selects only 'queued'. Resets attempts so the row goes out on the
+ * next pass instead of waiting out a backoff earned by a problem the user has
+ * since fixed (typically a replaced token).
+ */
+export async function requeue(sessionId: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE outbox SET status = 'queued', attempts = 0, next_attempt = NULL, error = NULL
+     WHERE session_id = ?`,
+    [sessionId]
+  );
+}
+
 export async function applyState(
   sessionId: string,
   state: OutboxState,

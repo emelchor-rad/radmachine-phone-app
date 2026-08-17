@@ -4,7 +4,9 @@ import { applyState, dueRows } from '../db/outbox';
 import { loadCredentials } from '../secure/credentials';
 import { backoffMs, nextState } from './worker';
 
-let inFlight: Promise<number> | null = null;
+export type DrainSummary = { attempted: number; sent: number; failed: number; queued: number };
+
+let inFlight: Promise<DrainSummary> | null = null;
 
 /**
  * Send every due row. Returns how many were processed.
@@ -19,7 +21,7 @@ let inFlight: Promise<number> | null = null;
  * racing passes can still overwrite a recovered session url with null and
  * double the traffic on a link that is marginal by definition.
  */
-export function drainOutbox(): Promise<number> {
+export function drainOutbox(): Promise<DrainSummary> {
   if (inFlight) return inFlight;
   inFlight = runDrain().finally(() => {
     inFlight = null;
@@ -38,14 +40,14 @@ export function drainOutbox(): Promise<number> {
  * that is marginal by definition. They stay due and go out on the next pass,
  * once the token has been replaced.
  */
-async function runDrain(): Promise<number> {
+async function runDrain(): Promise<DrainSummary> {
+  const summary: DrainSummary = { attempted: 0, sent: 0, failed: 0, queued: 0 };
+
   const creds = await loadCredentials();
-  if (!creds) return 0;
+  if (!creds) return summary;
 
   const client = new RadClient(creds.baseUrl, creds.token);
   const rows = await dueRows(new Date().toISOString());
-
-  let processed = 0;
 
   for (const row of rows) {
     const attempts = row.attempts + 1;
@@ -76,10 +78,11 @@ async function runDrain(): Promise<number> {
         : null;
 
     await applyState(row.sessionId, state, attempts, nextAttempt);
-    processed += 1;
+    summary.attempted += 1;
+    summary[state.status] += 1;
 
     if (outcome.kind === 'auth') break;
   }
 
-  return processed;
+  return summary;
 }

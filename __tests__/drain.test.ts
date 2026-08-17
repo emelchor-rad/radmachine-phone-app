@@ -84,7 +84,7 @@ beforeEach(() => {
 
 test('with no credentials stored it posts nothing and reports nothing done', async () => {
   mockLoadCredentials.mockResolvedValue(null);
-  await expect(drainOutbox()).resolves.toBe(0);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 0, sent: 0, failed: 0, queued: 0 });
   expect(mockPost).not.toHaveBeenCalled();
   expect(mockApplyState).not.toHaveBeenCalled();
 });
@@ -93,7 +93,7 @@ test('a 201 marks the row sent with the url the server returned', async () => {
   mockDueRows.mockResolvedValue([row('a')]);
   mockPost.mockResolvedValue(ok('https://x/api/qa/testlistinstances/500/'));
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 1, failed: 0, queued: 0 });
 
   expect(mockPost).toHaveBeenCalledWith('/qa/testlistinstances/', row('a').payload);
   const { state, attempts, nextAttempt } = stateFor('a');
@@ -117,7 +117,7 @@ test('a duplicate 400 marks the row sent and recovers the url by user_key', asyn
   mockPost.mockResolvedValue(duplicate);
   mockGet.mockResolvedValue({ results: [{ url: 'https://x/api/qa/testlistinstances/77/' }] });
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 1, failed: 0, queued: 0 });
 
   expect(mockGet).toHaveBeenCalledWith('/qa/testlistinstances/', { user_key: 'key-a' });
   expect(stateFor('a').state).toEqual({
@@ -132,7 +132,7 @@ test('if the recovery GET fails the row is still sent, only the url is lost', as
   mockPost.mockResolvedValue(duplicate);
   mockGet.mockRejectedValue(new Error('Network request failed'));
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 1, failed: 0, queued: 0 });
 
   // Losing a deep link is an inconvenience; losing the session is not.
   expect(stateFor('a').state).toEqual({ status: 'sent', sessionUrl: null, error: null });
@@ -143,7 +143,7 @@ test('a network throw leaves the row queued and due again later', async () => {
   mockDueRows.mockResolvedValue([row('a', { attempts: 2 })]);
   mockPost.mockRejectedValue(new Error('Network request failed'));
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 0, failed: 0, queued: 1 });
 
   const { state, attempts, nextAttempt } = stateFor('a');
   expect(state.status).toBe('queued');
@@ -157,7 +157,7 @@ test('a 500 also leaves the row queued and backed off', async () => {
   mockDueRows.mockResolvedValue([row('a')]);
   mockPost.mockResolvedValue({ status: 500, body: 'upstream exploded' });
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 0, failed: 0, queued: 1 });
 
   const { state, attempts, nextAttempt } = stateFor('a');
   expect(state.status).toBe('queued');
@@ -170,7 +170,7 @@ test('a 400 that is not a duplicate fails the row, since retrying cannot help', 
   mockDueRows.mockResolvedValue([row('a')]);
   mockPost.mockResolvedValue({ status: 400, body: '{"tests": ["This field is required."]}' });
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 0, failed: 1, queued: 0 });
 
   const { state, nextAttempt } = stateFor('a');
   expect(state.status).toBe('failed');
@@ -185,12 +185,33 @@ test('one row blowing up does not strand the rows behind it', async () => {
     .mockRejectedValueOnce(new Error('socket hang up'))
     .mockResolvedValueOnce(ok('https://x/3/'));
 
-  await expect(drainOutbox()).resolves.toBe(3);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 3, sent: 2, failed: 0, queued: 1 });
 
   expect(mockPost).toHaveBeenCalledTimes(3);
   expect(stateFor('a').state.status).toBe('sent');
   expect(stateFor('b').state.status).toBe('queued');
   expect(stateFor('c').state.status).toBe('sent');
+});
+
+/**
+ * The case the old numeric return could not express: a pass where some rows
+ * succeed and others fail in different ways still reported a single "N
+ * processed" that read the same whether every row landed or every row died.
+ * A 201, a hard 400 (failed, not retryable) and a network throw (queued,
+ * retryable) in the same pass must show up as three different outcomes.
+ */
+test('a pass mixing a success, a hard failure and a network error reports each outcome', async () => {
+  mockDueRows.mockResolvedValue([row('a'), row('b'), row('c')]);
+  mockPost
+    .mockResolvedValueOnce(ok('https://x/1/'))
+    .mockResolvedValueOnce({ status: 400, body: '{"tests": ["This field is required."]}' })
+    .mockRejectedValueOnce(new Error('Network request failed'));
+
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 3, sent: 1, failed: 1, queued: 1 });
+
+  expect(stateFor('a').state.status).toBe('sent');
+  expect(stateFor('b').state.status).toBe('failed');
+  expect(stateFor('c').state.status).toBe('queued');
 });
 
 /**
@@ -202,7 +223,7 @@ test('an auth failure keeps the row queued and stops the pass there', async () =
   mockDueRows.mockResolvedValue([row('a'), row('b'), row('c')]);
   mockPost.mockResolvedValue(unauthorized);
 
-  await expect(drainOutbox()).resolves.toBe(1);
+  await expect(drainOutbox()).resolves.toEqual({ attempted: 1, sent: 0, failed: 0, queued: 1 });
 
   expect(mockPost).toHaveBeenCalledTimes(1);
   expect(mockApplyState).toHaveBeenCalledTimes(1);
@@ -234,8 +255,9 @@ test('two overlapping drains are one pass, and both callers get an answer', asyn
   const [first, second] = await Promise.all([drainOutbox(), drainOutbox()]);
 
   expect(mockPost).toHaveBeenCalledTimes(2);
-  expect(first).toBe(2);
-  expect(second).toBe(2);
+  const expected = { attempted: 2, sent: 2, failed: 0, queued: 0 };
+  expect(first).toEqual(expected);
+  expect(second).toEqual(expected);
 });
 
 test('a later drain runs again once the first one has finished', async () => {
