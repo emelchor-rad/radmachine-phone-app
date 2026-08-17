@@ -1,19 +1,6 @@
 import type { Draft, DraftValue } from '../api/types';
 import { getDb } from './schema';
-
-/** SQLite has no boolean; keep the type recoverable on read. */
-function encode(v: number | boolean | null): string | null {
-  if (v === null) return null;
-  return typeof v === 'boolean' ? String(v) : String(v);
-}
-
-function decode(raw: string | null): number | boolean | null {
-  if (raw === null) return null;
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  const n = Number(raw);
-  return Number.isNaN(n) ? null : n;
-}
+import { encode, decode } from './codec';
 
 export async function createSession(
   id: string,
