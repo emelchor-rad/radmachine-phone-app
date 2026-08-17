@@ -22,7 +22,13 @@ export function nextState(outcome: SubmitOutcome, _attempts: number): OutboxStat
     case 'rejected':
       return { status: 'failed', sessionUrl: null, error: outcome.message };
     case 'auth':
-      return { status: 'failed', sessionUrl: null, error: outcome.message };
+      // NOT terminal. An auth error is a property of the credentials, not of
+      // the payload: an expired or rotated token -- or a captive portal
+      // answering 403 -- would otherwise fail every queued session in one
+      // pass, and no code path moves a row from 'failed' back to 'queued'.
+      // The reading survives in the value table but nothing can reach it.
+      // Keep the row queued, keep the message for the queue screen.
+      return { status: 'queued', sessionUrl: null, error: outcome.message };
     case 'retry':
       return { status: 'queued', sessionUrl: null, error: outcome.message };
   }

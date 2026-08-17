@@ -22,8 +22,20 @@ test('a rejection stops the row so it stops burning battery', () => {
   expect(s.error).toContain('required');
 });
 
-test('an auth problem stops the row too', () => {
-  expect(nextState({ kind: 'auth', message: 'bad token' }, 1).status).toBe('failed');
+/**
+ * An auth error is a property of the CREDENTIALS, not of the payload -- which
+ * makes it transient in exactly the way a network error is. An expired or
+ * rotated token, or a captive portal answering 403, would otherwise mark every
+ * queued session 'failed' in one pass, and nothing moves a row from 'failed'
+ * back to 'queued': the morning's readings would still be in the value table
+ * with no code path able to reach them. A token can be fixed; a failed row
+ * cannot be un-failed. So the row stays queued and keeps the message.
+ */
+test('an auth problem keeps the row queued, because a token can be fixed', () => {
+  const s = nextState({ kind: 'auth', message: 'bad token' }, 1);
+  expect(s.status).toBe('queued');
+  expect(s.error).toContain('bad token');
+  expect(s.sessionUrl).toBeNull();
 });
 
 test('a transient error keeps the row queued', () => {
