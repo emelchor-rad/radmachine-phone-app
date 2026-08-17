@@ -1,10 +1,32 @@
 import * as SQLite from 'expo-sqlite';
 
-let db: SQLite.SQLiteDatabase | null = null;
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (db) return db;
-  db = await SQLite.openDatabaseAsync('radmachine.db');
+/**
+ * The single database handle.
+ *
+ * Memoize the PROMISE, not the resolved handle. Memoizing the handle leaves a
+ * window between the first caller's check and its assignment in which a second
+ * caller also sees null, so both open a connection and both run the schema.
+ * That window is hit on every cold start: _layout fires drainOutbox() (which
+ * reaches getDb via dueRows) in the same tick as index's focus effect firing
+ * listCollections().
+ *
+ * CREATE TABLE IF NOT EXISTS survives that, so it looks harmless. It is not.
+ * Two live handles destroy the ordering the rest of the code rests on -- that
+ * the per-keystroke setValue writes are serialised ahead of the loadDraft read
+ * in finish() -- which is how a session gets submitted missing its last
+ * reading. PRAGMA journal_mode = WAL racing on two connections can also throw.
+ *
+ * Assigning the promise before the first await closes the window: callers
+ * arriving mid-open await the same open.
+ */
+export function getDb(): Promise<SQLite.SQLiteDatabase> {
+  return (dbPromise ??= openAndMigrate());
+}
+
+async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
+  const db = await SQLite.openDatabaseAsync('radmachine.db');
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
