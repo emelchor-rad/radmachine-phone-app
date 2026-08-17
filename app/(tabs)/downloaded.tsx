@@ -98,7 +98,14 @@ export default function Downloaded() {
       // that card counted only due and overdue. Listing everything downloaded
       // would answer a different question: tap a bucket showing 4 and get 5
       // rows. Opening the tab directly is the general case, so it shows all.
-      if (paramUnit || paramFreq) setDueOnly(true);
+      //
+      // ALL must be excluded explicitly. It is the sentinel for "no filter",
+      // but it is also a non-empty string: a truthiness test counts it as a
+      // filter, so Show all -- which writes ALL into the route -- came back
+      // switched on again the next time this tab was focused.
+      const arrivedFiltered =
+        (!!paramUnit && paramUnit !== ALL) || (!!paramFreq && paramFreq !== ALL);
+      if (arrivedFiltered) setDueOnly(true);
     }, [paramUnit, paramFreq])
   );
 
