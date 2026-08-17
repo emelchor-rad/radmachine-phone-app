@@ -9,13 +9,15 @@ export type DrainSummary = { attempted: number; sent: number; failed: number; qu
 let inFlight: Promise<DrainSummary> | null = null;
 
 /**
- * Send every due row. Returns how many were processed.
+ * Send every due row. Returns what happened to each, broken down -- a single
+ * attempted-count cannot tell "3 sent" from "3 failed", and the queue screen
+ * has to say which.
  *
  * Walking out of a bunker fires the connectivity and foreground events within
  * milliseconds of each other, so overlapping calls are the normal case, not an
  * edge case. A caller arriving mid-run joins the run already going instead of
- * starting a second pass over the same rows -- so it reports that run's count,
- * not a count of its own.
+ * starting a second pass over the same rows -- so it reports that run's
+ * summary, not one of its own.
  *
  * The user_key guard already makes a double POST harmless at the server, but
  * racing passes can still overwrite a recovered session url with null and
