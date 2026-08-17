@@ -1,4 +1,4 @@
-import { parseReading, isInvalidReading } from '../src/sync/reading';
+import { parseReading, isInvalidReading, summarizeReadings } from '../src/sync/reading';
 
 test('a plain integer parses', () => {
   expect(parseReading('42')).toBe(42);
@@ -65,4 +65,116 @@ test('a valid reading is never invalid', () => {
   expect(isInvalidReading('10.2')).toBe(false);
   expect(isInvalidReading('0')).toBe(false);
   expect(isInvalidReading('-0.8')).toBe(false);
+});
+
+// --- summarizeReadings -------------------------------------------------------
+
+const defs = [
+  { slug: 'dose', name: 'Dose 6MV' },
+  { slug: 'shift', name: 'Deviation Inplane' },
+  { slug: 'door', name: 'Door interlock' },
+  { slug: 'laser', name: 'Laser alignment' },
+];
+
+const names = (ts: { name: string }[]) => ts.map((t) => t.name);
+
+test('a filled number counts as filled', () => {
+  const s = summarizeReadings([defs[0]], { dose: { value: 10.2 } }, { dose: '10.2' });
+  expect(names(s.filled)).toEqual(['Dose 6MV']);
+  expect(s.skipped).toEqual([]);
+  expect(s.invalid).toEqual([]);
+});
+
+test('a reading of 0 counts as filled, not skipped', () => {
+  const s = summarizeReadings([defs[0]], { dose: { value: 0 } }, { dose: '0' });
+  expect(names(s.filled)).toEqual(['Dose 6MV']);
+  expect(s.skipped).toEqual([]);
+});
+
+test('a boolean left at false counts as filled -- a recorded "No"', () => {
+  const s = summarizeReadings([defs[2]], { door: { value: false } }, {});
+  expect(names(s.filled)).toEqual(['Door interlock']);
+  expect(s.skipped).toEqual([]);
+});
+
+test('a test with no entry at all is skipped and is named', () => {
+  const s = summarizeReadings(defs, {}, {});
+  expect(names(s.skipped)).toEqual([
+    'Dose 6MV',
+    'Deviation Inplane',
+    'Door interlock',
+    'Laser alignment',
+  ]);
+  expect(s.filled).toEqual([]);
+});
+
+test('an explicit null value is skipped (the field was cleared)', () => {
+  const s = summarizeReadings([defs[0]], { dose: { value: null } }, { dose: '' });
+  expect(names(s.skipped)).toEqual(['Dose 6MV']);
+});
+
+test('unparseable text is invalid, NOT skipped -- this is the C2 bug', () => {
+  // The stored value is null because '1.2.3' never parsed, so buildPayload
+  // would send {skipped: true} while the box still shows '1.2.3'.
+  const s = summarizeReadings([defs[0]], { dose: { value: null } }, { dose: '1.2.3' });
+  expect(names(s.invalid)).toEqual(['Dose 6MV']);
+  expect(s.skipped).toEqual([]);
+  expect(s.filled).toEqual([]);
+});
+
+test('the bare minus from +/- on an empty field is invalid', () => {
+  const s = summarizeReadings([defs[1]], { shift: { value: null } }, { shift: '-' });
+  expect(names(s.invalid)).toEqual(['Deviation Inplane']);
+});
+
+test('a double dot is invalid', () => {
+  const s = summarizeReadings([defs[0]], { dose: { value: null } }, { dose: '0..5' });
+  expect(names(s.invalid)).toEqual(['Dose 6MV']);
+});
+
+test('invalid wins over a stale stored value', () => {
+  // The user had typed 5, then edited it into nonsense: the stored value is
+  // whatever updateNumber last wrote, but the screen shows garbage.
+  const s = summarizeReadings([defs[0]], { dose: { value: 5 } }, { dose: '5..' });
+  expect(names(s.invalid)).toEqual(['Dose 6MV']);
+  expect(s.filled).toEqual([]);
+});
+
+test('a mixed worksheet splits into all three groups', () => {
+  const s = summarizeReadings(
+    defs,
+    { dose: { value: 10.2 }, shift: { value: null }, door: { value: true } },
+    { dose: '10.2', shift: '1.2.3' }
+  );
+  expect(names(s.filled)).toEqual(['Dose 6MV', 'Door interlock']);
+  expect(names(s.skipped)).toEqual(['Laser alignment']);
+  expect(names(s.invalid)).toEqual(['Deviation Inplane']);
+});
+
+test('text or values for slugs outside the definitions are ignored', () => {
+  // Definitions are re-read from the database at finish time; leftover state
+  // for a slug that is no longer in the list must not appear in the summary.
+  const s = summarizeReadings(
+    [defs[0]],
+    { dose: { value: 1 }, gone: { value: null } },
+    { dose: '1', gone: 'abc' }
+  );
+  expect(names(s.filled)).toEqual(['Dose 6MV']);
+  expect(s.invalid).toEqual([]);
+  expect(s.skipped).toEqual([]);
+});
+
+test('an empty definition list summarises to nothing at all', () => {
+  const s = summarizeReadings([], { dose: { value: 1 } }, { dose: '1' });
+  expect(s.filled).toEqual([]);
+  expect(s.skipped).toEqual([]);
+  expect(s.invalid).toEqual([]);
+});
+
+test('summarizeReadings does not mutate its inputs', () => {
+  const values = { dose: { value: 1 } };
+  const texts = { dose: '1' };
+  summarizeReadings(defs, values, texts);
+  expect(values).toEqual({ dose: { value: 1 } });
+  expect(texts).toEqual({ dose: '1' });
 });

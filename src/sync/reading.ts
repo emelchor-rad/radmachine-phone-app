@@ -20,3 +20,54 @@ export function parseReading(text: string): number | null {
 export function isInvalidReading(text: string): boolean {
   return text.trim() !== '' && parseReading(text) === null;
 }
+
+/** The minimum a test definition has to carry to be reported to the user. */
+export type NamedTest = { slug: string; name: string };
+
+/** What is stored per slug: only the value matters for filled-vs-skipped. */
+export type ValueLike = { value: number | boolean | null | undefined };
+
+export type ReadingSummary<T extends NamedTest> = {
+  /** Will be submitted with a value. */
+  filled: T[];
+  /** Will be submitted as `{skipped: true}` -- never touched, or cleared. */
+  skipped: T[];
+  /** Shows text on screen that does not parse; must never be submitted. */
+  invalid: T[];
+};
+
+/**
+ * Split the test definitions into what will actually be submitted.
+ *
+ * This lives here, not in the worksheet component, because it is the whole
+ * safety argument of the pre-submit summary and it has to be testable: an
+ * `invalid` test is one whose box visibly contains something the physicist
+ * believes they recorded, while the stored value is null -- so `buildPayload`
+ * would send `{skipped: true}` and nobody would ever know. Callers must refuse
+ * to submit while `invalid` is non-empty, and must name `skipped` out loud.
+ *
+ * `texts` is the raw typed text per slug (numeric fields only); `values` is
+ * what was persisted. Booleans never appear in `texts`, so a switch left at
+ * "No" lands in `filled` (value false was recorded) and a switch never touched
+ * lands in `skipped` -- the two look identical on screen, which is exactly the
+ * confusion the summary exists to expose.
+ */
+export function summarizeReadings<T extends NamedTest>(
+  defs: readonly T[],
+  values: Record<string, ValueLike | undefined>,
+  texts: Record<string, string | undefined>
+): ReadingSummary<T> {
+  const summary: ReadingSummary<T> = { filled: [], skipped: [], invalid: [] };
+
+  for (const def of defs) {
+    if (isInvalidReading(texts[def.slug] ?? '')) {
+      summary.invalid.push(def);
+      continue;
+    }
+    const v = values[def.slug]?.value;
+    if (v === null || v === undefined) summary.skipped.push(def);
+    else summary.filled.push(def);
+  }
+
+  return summary;
+}
