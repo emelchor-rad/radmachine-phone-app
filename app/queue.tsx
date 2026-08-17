@@ -1,8 +1,25 @@
 import { useCallback, useState } from 'react';
 import { Button, FlatList, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { allRows, type OutboxRow } from '../src/db/outbox';
-import { drainOutbox } from '../src/sync/drain';
+import { allRows, requeue, type OutboxRow } from '../src/db/outbox';
+import { drainOutbox, type DrainSummary } from '../src/sync/drain';
+
+/**
+ * A user-facing sentence for a drain pass.
+ *
+ * `attempted` alone cannot say whether a pass helped or not -- "Processed 3"
+ * reads the same whether all three landed or all three died. Reporting each
+ * outcome, and saying "nothing to send" instead of "0 sent" when nothing was
+ * due, is the whole point of this task.
+ */
+function summarize(s: DrainSummary): string {
+  if (s.attempted === 0) return 'Nothing to send.';
+  const parts: string[] = [];
+  if (s.sent) parts.push(`${s.sent} sent`);
+  if (s.failed) parts.push(`${s.failed} failed`);
+  if (s.queued) parts.push(`${s.queued} still queued`);
+  return `${parts.join(', ')}.`;
+}
 
 export default function Queue() {
   const [rows, setRows] = useState<OutboxRow[]>([]);
@@ -22,8 +39,19 @@ export default function Queue() {
     // but a bare throw would surface as an unhandled rejection instead of a
     // message the physicist can read.
     try {
-      const n = await drainOutbox();
-      setMsg(`Processed ${n} session(s).`);
+      const summary = await drainOutbox();
+      setMsg(summarize(summary));
+    } catch (e: any) {
+      setMsg(e.message);
+    }
+    await refresh();
+  };
+
+  const retry = async (sessionId: string) => {
+    try {
+      await requeue(sessionId);
+      const summary = await drainOutbox();
+      setMsg(summarize(summary));
     } catch (e: any) {
       setMsg(e.message);
     }
@@ -38,10 +66,13 @@ export default function Queue() {
         data={rows}
         keyExtractor={(r) => r.sessionId}
         renderItem={({ item }) => (
-          <View style={{ paddingVertical: 8 }}>
+          <View style={{ paddingVertical: 8, gap: 4 }}>
             <Text>{item.status.toUpperCase()} — attempts {item.attempts}</Text>
             {item.sessionUrl ? <Text>{item.sessionUrl}</Text> : null}
             {item.error ? <Text style={{ color: 'red' }}>{item.error}</Text> : null}
+            {item.status !== 'sent' ? (
+              <Button title="Retry" onPress={() => retry(item.sessionId)} />
+            ) : null}
           </View>
         )}
       />
