@@ -17,8 +17,16 @@ export default function Queue() {
 
   const send = async () => {
     setMsg('Sending...');
-    const n = await drainOutbox();
-    setMsg(`Processed ${n} session(s).`);
+    // drainOutbox rejects if the credentials store or the database throws.
+    // Being offline is not an error here -- each row records its own outcome --
+    // but a bare throw would surface as an unhandled rejection instead of a
+    // message the physicist can read.
+    try {
+      const n = await drainOutbox();
+      setMsg(`Processed ${n} session(s).`);
+    } catch (e: any) {
+      setMsg(e.message);
+    }
     await refresh();
   };
 
