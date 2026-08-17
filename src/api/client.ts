@@ -35,6 +35,24 @@ export class RadClient {
     return JSON.parse(body) as T;
   }
 
+  /**
+   * Follow DRF pagination and return every result.
+   *
+   * The API pages at 10. A caller that reads `results` from a single GET sees
+   * a truncated list and no error, which is how 336 collections looked like 10.
+   */
+  async getAll<T = any>(path: string, params?: Record<string, string>): Promise<T[]> {
+    const out: T[] = [];
+    let url: string | null = this.url(path, params);
+    while (url) {
+      const r: any = await this.get<any>(url);
+      if (!r || !Array.isArray(r.results)) return Array.isArray(r) ? (r as T[]) : out;
+      out.push(...r.results);
+      url = r.next ?? null;
+    }
+    return out;
+  }
+
   async post(path: string, data: unknown): Promise<{ status: number; body: string }> {
     const r = await fetch(this.url(path), {
       method: 'POST',
