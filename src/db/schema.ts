@@ -74,6 +74,18 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       session_url  TEXT,
       error        TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS schedule (
+      utc_url        TEXT PRIMARY KEY,
+      unit_url       TEXT NOT NULL,
+      unit_name      TEXT NOT NULL,
+      site_url       TEXT,
+      site_name      TEXT,
+      frequency_url  TEXT,
+      frequency_name TEXT,
+      due_date       TEXT,
+      refreshed_at   TEXT NOT NULL
+    );
   `);
   return db;
 }
