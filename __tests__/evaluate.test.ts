@@ -24,8 +24,26 @@ test('no criteria means no_tol', () => {
   expect(evaluateReading('simple', 0.2, null)).toBe('no_tol');
 });
 
-test('string readings never get a tolerance level', () => {
-  expect(evaluateReading('string', 'warm-up', band)).toBe('no_tol');
+test('string with multchoice tolerance matches pass, tol and action', () => {
+  const mc: TestCriteria = {
+    refValue: null,
+    refType: 'numerical',
+    tolType: 'multchoice',
+    actLow: null,
+    tolLow: null,
+    tolHigh: null,
+    actHigh: null,
+    mcPassChoices: ['Pass', 'OK'],
+    mcTolChoices: ['Review'],
+  };
+  expect(evaluateReading('string', 'pass', mc)).toBe('ok');
+  expect(evaluateReading('string', 'Review', mc)).toBe('tolerance');
+  expect(evaluateReading('string', 'Fail', mc)).toBe('action');
+});
+
+test('composite numerical value uses the same band as simple', () => {
+  expect(evaluateReading('composite', -0.3, band)).toBe('ok');
+  expect(evaluateReading('composite', 2, band)).toBe('action');
 });
 
 test('inside the tolerance band is ok', () => {
@@ -103,6 +121,41 @@ test('criteriaFromUti resolves linked reference and tolerance', () => {
 
 test('criteriaFromUti without reference returns null', () => {
   expect(criteriaFromUti({ test: 't/1', reference: null, tolerance: null }, new Map(), new Map())).toBeNull();
+});
+
+test('criteriaFromUti resolves multchoice tolerance without a reference', () => {
+  const tols = new Map([
+    [
+      'tol/mc',
+      { type: 'multchoice', mc_pass_choices: 'Pass, OK', mc_tol_choices: 'Review' },
+    ],
+  ]);
+  const c = criteriaFromUti(
+    { test: 't/1', reference: null, tolerance: 'tol/mc' },
+    new Map(),
+    tols
+  );
+  expect(c).toMatchObject({
+    tolType: 'multchoice',
+    mcPassChoices: ['Pass', 'OK'],
+    mcTolChoices: ['Review'],
+  });
+});
+
+test('criteriaLine describes multchoice pass and tolerance lists', () => {
+  expect(
+    criteriaLine({
+      refValue: null,
+      refType: 'numerical',
+      tolType: 'multchoice',
+      actLow: null,
+      tolLow: null,
+      tolHigh: null,
+      actHigh: null,
+      mcPassChoices: ['A'],
+      mcTolChoices: ['B'],
+    })
+  ).toBe('Pass: A · Tol: B');
 });
 
 const levels: EvalLevel[] = ['ok', 'tolerance', 'action', 'no_tol', 'unrecorded'];

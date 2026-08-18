@@ -14,7 +14,18 @@ type RawTol = {
   tol_low?: number | null;
   tol_high?: number | null;
   act_high?: number | null;
+  mc_pass_choices?: string | null;
+  mc_tol_choices?: string | null;
 };
+
+/** Split QATrack's comma-separated multchoice lists. */
+export function parseMcChoices(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 /**
  * Turn one UTI's linked reference and tolerance into storable criteria.
@@ -26,9 +37,27 @@ export function criteriaFromUti(
   refs: Map<string, RawRef>,
   tols: Map<string, RawTol>
 ): TestCriteria | null {
-  if (!uti.reference) return null;
-  const ref = refs.get(uti.reference);
-  if (!ref || ref.value === null || ref.value === undefined) return null;
+  const tol = uti.tolerance ? tols.get(uti.tolerance) : undefined;
+  const ref = uti.reference ? refs.get(uti.reference) : undefined;
+
+  if (tol?.type === 'multchoice') {
+    const mcPassChoices = parseMcChoices(tol.mc_pass_choices);
+    const mcTolChoices = parseMcChoices(tol.mc_tol_choices);
+    if (mcPassChoices.length === 0 && mcTolChoices.length === 0) return null;
+    return {
+      refValue: ref?.value ?? null,
+      refType: ref?.type === 'boolean' ? 'boolean' : 'numerical',
+      tolType: 'multchoice',
+      actLow: null,
+      tolLow: null,
+      tolHigh: null,
+      actHigh: null,
+      mcPassChoices,
+      mcTolChoices,
+    };
+  }
+
+  if (!uti.reference || !ref || ref.value === null || ref.value === undefined) return null;
 
   const out: TestCriteria = {
     refValue: ref.value,
@@ -40,15 +69,12 @@ export function criteriaFromUti(
     actHigh: null,
   };
 
-  if (uti.tolerance) {
-    const tol = tols.get(uti.tolerance);
-    if (tol?.type === 'absolute' || tol?.type === 'percent') {
-      out.tolType = tol.type;
-      out.actLow = tol.act_low ?? null;
-      out.tolLow = tol.tol_low ?? null;
-      out.tolHigh = tol.tol_high ?? null;
-      out.actHigh = tol.act_high ?? null;
-    }
+  if (tol?.type === 'absolute' || tol?.type === 'percent') {
+    out.tolType = tol.type;
+    out.actLow = tol.act_low ?? null;
+    out.tolLow = tol.tol_low ?? null;
+    out.tolHigh = tol.tol_high ?? null;
+    out.actHigh = tol.act_high ?? null;
   }
 
   return out;

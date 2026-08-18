@@ -22,27 +22,22 @@ function percentDiff(value: number, ref: number): number | null {
   return (100 * (value - ref)) / ref;
 }
 
-/**
- * Where does this reading stand against the criteria downloaded with the list?
- *
- * Mirrors qatrack.qa.models.TestInstance.calculate_pass_fail: the phone shows
- * an indication only; RadMachine still computes the stored result on POST.
- */
-export function evaluateReading(
-  type: TestType,
-  value: number | boolean | string | null,
-  criteria: TestCriteria | null | undefined
+function evaluateMultchoice(value: string, criteria: TestCriteria): EvalLevel {
+  const choice = value.trim().toLowerCase();
+  if (!choice) return 'unrecorded';
+  const pass = (criteria.mcPassChoices ?? []).map((c) => c.trim().toLowerCase());
+  const tol = (criteria.mcTolChoices ?? []).map((c) => c.trim().toLowerCase());
+  if (pass.includes(choice)) return 'ok';
+  if (tol.includes(choice)) return 'tolerance';
+  return 'action';
+}
+
+function evaluateNumerical(
+  value: number | boolean,
+  criteria: TestCriteria
 ): EvalLevel {
-  if (value === null) return 'unrecorded';
-  if (type === 'string') return 'no_tol';
-  if (!criteria || criteria.refValue === null) return 'no_tol';
-
-  if (type === 'boolean') {
-    const diff = Math.abs(criteria.refValue - numericValue(value));
-    return diff > EPSILON ? 'action' : 'ok';
-  }
-
-  if (criteria.tolType === null) return 'no_tol';
+  if (criteria.refValue === null) return 'no_tol';
+  if (criteria.tolType !== 'absolute' && criteria.tolType !== 'percent') return 'no_tol';
 
   const num = numericValue(value);
   const diff =
@@ -67,6 +62,45 @@ export function evaluateReading(
   return 'ok';
 }
 
+/**
+ * Where does this reading stand against the criteria downloaded with the list?
+ *
+ * Mirrors qatrack.qa.models.TestInstance.calculate_pass_fail: the phone shows
+ * an indication only; RadMachine still computes the stored result on POST.
+ */
+export function evaluateReading(
+  type: TestType,
+  value: number | boolean | string | null,
+  criteria: TestCriteria | null | undefined
+): EvalLevel {
+  if (value === null || value === '') return 'unrecorded';
+  if (!criteria) return 'no_tol';
+
+  if (criteria.tolType === 'multchoice') {
+    if (typeof value !== 'string') return 'no_tol';
+    return evaluateMultchoice(value, criteria);
+  }
+
+  if (type === 'boolean') {
+    if (criteria.refValue === null) return 'no_tol';
+    const diff = Math.abs(criteria.refValue - numericValue(value));
+    return diff > EPSILON ? 'action' : 'ok';
+  }
+
+  if (type === 'string') return 'no_tol';
+
+  if (type === 'scomposite') {
+    if (typeof value === 'string') return evaluateMultchoice(value, criteria);
+    return 'no_tol';
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return evaluateNumerical(value, criteria);
+  }
+
+  return 'no_tol';
+}
+
 export const EVAL_COLOUR: Record<EvalLevel, string | null> = {
   ok: '#1b7f3b',
   tolerance: '#8a6d00',
@@ -85,7 +119,18 @@ export const EVAL_LABEL: Record<EvalLevel, string | null> = {
 
 /** One line the physicist reads beside a field: what was downloaded, not computed. */
 export function criteriaLine(criteria: TestCriteria | null | undefined): string | null {
-  if (!criteria || criteria.refValue === null) return null;
+  if (!criteria) return null;
+
+  if (criteria.tolType === 'multchoice') {
+    const pass = criteria.mcPassChoices?.join(', ') ?? '';
+    const tol = criteria.mcTolChoices?.join(', ') ?? '';
+    const parts: string[] = [];
+    if (pass) parts.push(`Pass: ${pass}`);
+    if (tol) parts.push(`Tol: ${tol}`);
+    return parts.length ? parts.join(' · ') : null;
+  }
+
+  if (criteria.refValue === null) return null;
   if (criteria.refType === 'boolean') {
     return `Ref: ${criteria.refValue >= 0.5 ? 'Pass' : 'Fail'}`;
   }

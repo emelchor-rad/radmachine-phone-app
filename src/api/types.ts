@@ -22,13 +22,16 @@ export function isCompositeType(type: TestType): boolean {
 
 /** Reference and tolerance downloaded for one test on one unit. */
 export type TestCriteria = {
-  refValue: number;
+  refValue: number | null;
   refType: 'numerical' | 'boolean';
-  tolType: 'absolute' | 'percent' | null;
+  tolType: 'absolute' | 'percent' | 'multchoice' | null;
   actLow: number | null;
   tolLow: number | null;
   tolHigh: number | null;
   actHigh: number | null;
+  /** Populated when tolType is multchoice (string / string-composite tests). */
+  mcPassChoices?: string[];
+  mcTolChoices?: string[];
 };
 
 /** One test as stored locally after downloading a definition. */
