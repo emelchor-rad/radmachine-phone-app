@@ -70,9 +70,6 @@ export default function Downloaded() {
 
   const [unitFilter, setUnitFilter] = useState(ALL);
   const [freqFilter, setFreqFilter] = useState(ALL);
-  // Off by default: opening this tab directly means "what do I carry?".
-  // Turned on when arriving from a dashboard card, which asks "what do I owe?".
-  const [dueOnly, setDueOnly] = useState(false);
 
   /**
    * Seed the filters from the route, on every focus.
@@ -95,18 +92,6 @@ export default function Downloaded() {
     useCallback(() => {
       if (paramUnit) setUnitFilter(paramUnit);
       if (paramFreq) setFreqFilter(frequencyFilterFor(paramFreq));
-      // Arriving from a dashboard card is a request to see what is owed, and
-      // that card counted only due and overdue. Listing everything downloaded
-      // would answer a different question: tap a bucket showing 4 and get 5
-      // rows. Opening the tab directly is the general case, so it shows all.
-      //
-      // ALL must be excluded explicitly. It is the sentinel for "no filter",
-      // but it is also a non-empty string: a truthiness test counts it as a
-      // filter, so Show all -- which writes ALL into the route -- came back
-      // switched on again the next time this tab was focused.
-      const arrivedFiltered =
-        (!!paramUnit && paramUnit !== ALL) || (!!paramFreq && paramFreq !== ALL);
-      if (arrivedFiltered) setDueOnly(true);
     }, [paramUnit, paramFreq])
   );
 
@@ -207,21 +192,36 @@ export default function Downloaded() {
   }, [lib.rows]);
 
   const visible = useMemo(() => {
-    const matched = filterSchedule(lib.rows, unitFilter, freqFilter);
-    const kept = dueOnly
-      ? matched.filter((r) => {
-          const s = dueState(r.dueDate, new Date());
-          return s === 'due' || s === 'overdue';
-        })
-      : matched;
-    // listSchedule has no ORDER BY, so order the list here rather than let
-    // SQLite decide it differently between two loads.
+    const kept = filterSchedule(lib.rows, unitFilter, freqFilter);
+    // Sorted, never hidden. A dashboard tile counts only what is due, so it can
+    // say 4 while this list holds 5 -- an earlier version filtered the extra one
+    // out to make the numbers agree, and that hidden state then survived a
+    // dropdown change and made the filters look broken. Ordering by urgency
+    // reconciles the two numbers without anything invisible: what the tile
+    // counted is simply at the top, and the count line names both figures.
+    //
+    // listSchedule has no ORDER BY, so order here rather than let SQLite decide
+    // it differently between two loads.
+    const rank = (r: ScheduleRow) => {
+      const s = dueState(r.dueDate, now);
+      return s === 'overdue' ? 0 : s === 'due' ? 1 : 2;
+    };
     return [...kept].sort(
       (a, b) =>
+        rank(a) - rank(b) ||
         a.unitName.localeCompare(b.unitName) ||
         (lib.names[a.utcUrl] ?? a.utcUrl).localeCompare(lib.names[b.utcUrl] ?? b.utcUrl)
     );
-  }, [lib.rows, lib.names, unitFilter, freqFilter, dueOnly]);
+  }, [lib.rows, lib.names, unitFilter, freqFilter]);
+
+  const dueCount = useMemo(
+    () =>
+      visible.filter((r) => {
+        const s = dueState(r.dueDate, now);
+        return s === 'due' || s === 'overdue';
+      }).length,
+    [visible]
+  );
 
   const filtered = unitFilter !== ALL || freqFilter !== ALL;
 
@@ -238,7 +238,6 @@ export default function Downloaded() {
   const showAll = () => {
     setUnitFilter(ALL);
     setFreqFilter(ALL);
-    setDueOnly(false);
     router.setParams({ unitUrl: ALL, frequencyName: ALL });
   };
 
@@ -286,16 +285,11 @@ export default function Downloaded() {
       >
         {/* Says a working filter apart from a broken screen. */}
         <Text style={{ color: MUTED, fontSize: 12, flexShrink: 1 }}>
-          {visible.length} of {lib.rows.length} downloaded
-          {dueOnly ? ' · due or overdue only' : ''}
+          {visible.length} of {lib.rows.length} downloaded · {dueCount} due or overdue
           {lib.missing > 0
             ? ` · ${lib.missing} more not in the schedule yet — they appear after the next sync`
             : ''}
         </Text>
-        <Button
-          title={dueOnly ? 'Show not due' : 'Due only'}
-          onPress={() => setDueOnly((v) => !v)}
-        />
         {/* A filter arrived from the dashboard is otherwise indistinguishable
             from an empty library, and the user must be able to undo it without
             leaving the tab. */}
