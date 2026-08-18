@@ -8,6 +8,7 @@ import {
   ALL,
   buildCatalogue,
   definitionUrl,
+  resolveUnitUrl,
   scheduleRowFor,
   type CatalogueRow,
   type RawCollection,
@@ -122,8 +123,15 @@ export default function Catalogue() {
     try {
       const listUrl = definitionUrl(utc, creds.baseUrl);
       let tests = await flattenTestList(listUrl, (u) => c.get<any>(u));
-      const unitUrl = utc.unit;
-      if (unitUrl) tests = await attachCriteria(c, unitUrl, tests);
+      const unitUrl = resolveUnitUrl(utc.unit, browsed.units);
+      if (unitUrl) {
+        try {
+          tests = await attachCriteria(c, unitUrl, tests);
+        } catch {
+          // Criteria are optional — tolerance hints only. A mismatched unit url
+          // or missing unittestinfo must not block downloading the list itself.
+        }
+      }
       await saveCollection(
         {
           utcUrl: utc.url,

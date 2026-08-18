@@ -14,7 +14,12 @@ export function buildPayload(defs: TestDef[], draft: Draft): SubmitPayload {
   for (const def of defs) {
     if (!isFillableType(def.type)) continue;
     const entry = draft.values[def.slug];
-    if (!entry || entry.value === null || entry.value === undefined) {
+    if (
+      !entry ||
+      entry.value === null ||
+      entry.value === undefined ||
+      entry.value === ''
+    ) {
       tests[def.slug] = { skipped: true };
       continue;
     }

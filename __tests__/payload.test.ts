@@ -78,3 +78,23 @@ test('composite tests are never included in the payload', () => {
   const p = buildPayload(withComposite, draft);
   expect(Object.keys(p.tests).sort()).toEqual(['beam_on', 'coll_size', 'odi_at_iso']);
 });
+
+test('a string value is submitted as text', () => {
+  const withString: TestDef[] = [
+    ...defs,
+    { slug: 'notes', name: 'Notes', type: 'string', order: 3, sublist: null },
+  ];
+  const d = {
+    ...draft,
+    values: { ...draft.values, notes: { value: 'OK after warm-up' } },
+  };
+  expect(buildPayload(withString, d).tests.notes).toEqual({ value: 'OK after warm-up' });
+});
+
+test('an empty string is submitted as skipped', () => {
+  const withString: TestDef[] = [
+    { slug: 'notes', name: 'Notes', type: 'string', order: 0, sublist: null },
+  ];
+  const d = { ...draft, values: { notes: { value: '' } } };
+  expect(buildPayload(withString, d).tests.notes).toEqual({ skipped: true });
+});

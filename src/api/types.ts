@@ -1,18 +1,19 @@
-export type TestType = 'simple' | 'boolean' | 'composite' | 'scomposite';
+export type TestType = 'simple' | 'boolean' | 'string' | 'composite' | 'scomposite';
 
 /** Types the physicist enters by hand; everything else is server-calculated. */
-export const FILLABLE_TYPES: TestType[] = ['simple', 'boolean'];
+export const FILLABLE_TYPES: TestType[] = ['simple', 'boolean', 'string'];
 
 /** Types we can download and show on a worksheet (includes read-only composites). */
 export const DOWNLOADABLE_TYPES: TestType[] = [
   'simple',
   'boolean',
+  'string',
   'composite',
   'scomposite',
 ];
 
 export function isFillableType(type: TestType): boolean {
-  return type === 'simple' || type === 'boolean';
+  return type === 'simple' || type === 'boolean' || type === 'string';
 }
 
 export function isCompositeType(type: TestType): boolean {
@@ -44,7 +45,7 @@ export type TestDef = {
 
 /** What the user has entered so far. */
 export type DraftValue = {
-  value: number | boolean | null; // null = not filled in
+  value: number | boolean | string | null; // null = not filled in
   comment?: string;
 };
 
@@ -57,7 +58,7 @@ export type Draft = {
 };
 
 export type SubmittedTest =
-  | { value: number | boolean; comment?: string }
+  | { value: number | boolean | string; comment?: string }
   | { skipped: true };
 
 export type SubmitPayload = {

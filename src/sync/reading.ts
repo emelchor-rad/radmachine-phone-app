@@ -28,7 +28,7 @@ import { isFillableType, isCompositeType } from '../api/types';
 export type NamedTest = { slug: string; name: string; type?: TestType };
 
 /** What is stored per slug: only the value matters for filled-vs-skipped. */
-export type ValueLike = { value: number | boolean | null | undefined };
+export type ValueLike = { value: number | boolean | string | null | undefined };
 
 export type ReadingSummary<T extends NamedTest> = {
   /** Will be submitted with a value. */
@@ -66,6 +66,12 @@ export function summarizeReadings<T extends NamedTest>(
 
   for (const def of defs) {
     if (def.type !== undefined && !isFillableType(def.type)) continue;
+    if (def.type === 'string') {
+      const v = values[def.slug]?.value;
+      if (v === null || v === undefined || v === '') summary.skipped.push(def);
+      else summary.filled.push(def);
+      continue;
+    }
     if (isInvalidReading(texts[def.slug] ?? '')) {
       summary.invalid.push(def);
       continue;

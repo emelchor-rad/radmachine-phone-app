@@ -30,10 +30,11 @@ function percentDiff(value: number, ref: number): number | null {
  */
 export function evaluateReading(
   type: TestType,
-  value: number | boolean | null,
+  value: number | boolean | string | null,
   criteria: TestCriteria | null | undefined
 ): EvalLevel {
   if (value === null) return 'unrecorded';
+  if (type === 'string') return 'no_tol';
   if (!criteria || criteria.refValue === null) return 'no_tol';
 
   if (type === 'boolean') {

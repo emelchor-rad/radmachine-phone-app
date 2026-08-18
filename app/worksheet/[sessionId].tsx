@@ -64,6 +64,7 @@ export default function Worksheet() {
         const seed: Record<string, string> = {};
         for (const [slug, dv] of Object.entries(draft.values)) {
           if (typeof dv.value === 'number') seed[slug] = String(dv.value);
+          else if (typeof dv.value === 'string') seed[slug] = dv.value;
         }
         setTexts(seed);
         setLoaded(true);
@@ -204,8 +205,9 @@ export default function Worksheet() {
         const header = t.sublist !== lastSublist ? ((lastSublist = t.sublist), t.sublist) : null;
         const v = values[t.slug]?.value ?? null;
         const composite = isCompositeType(t.type);
-        const bad = !composite && isInvalidReading(texts[t.slug] ?? '');
-        const level = composite ? null : evaluateReading(t.type, v, t.criteria);
+        const isString = t.type === 'string';
+        const bad = t.type === 'simple' && isInvalidReading(texts[t.slug] ?? '');
+        const level = composite || isString ? null : evaluateReading(t.type, v, t.criteria);
         const levelColour = level ? EVAL_COLOUR[level] : null;
         const levelLabel = level ? EVAL_LABEL[level] : null;
         const refLine = criteriaLine(t.criteria);
@@ -238,6 +240,17 @@ export default function Worksheet() {
                 label={t.name}
                 value={typeof v === 'boolean' ? v : null}
                 onChange={(b) => update(t.slug, { value: b })}
+              />
+            ) : isString ? (
+              <TextInput
+                value={typeof v === 'string' ? v : ''}
+                onChangeText={(txt) => update(t.slug, { value: txt.trim() === '' ? null : txt })}
+                accessibilityLabel={t.name}
+                style={{
+                  borderWidth: 1,
+                  borderColor: '#888',
+                  padding: 8,
+                }}
               />
             ) : (
               <>

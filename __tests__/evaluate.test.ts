@@ -24,6 +24,10 @@ test('no criteria means no_tol', () => {
   expect(evaluateReading('simple', 0.2, null)).toBe('no_tol');
 });
 
+test('string readings never get a tolerance level', () => {
+  expect(evaluateReading('string', 'warm-up', band)).toBe('no_tol');
+});
+
 test('inside the tolerance band is ok', () => {
   expect(evaluateReading('simple', -0.3, band)).toBe('ok');
   expect(evaluateReading('simple', 0, band)).toBe('ok');

@@ -29,3 +29,7 @@ test('a large number round-trips', () => {
 test('null round-trips', () => {
   expect(roundTrip(null)).toBeNull();
 });
+
+test('a string round-trips when decoded with type string', () => {
+  expect(decode(encode('warm-up complete'), 'string')).toBe('warm-up complete');
+});

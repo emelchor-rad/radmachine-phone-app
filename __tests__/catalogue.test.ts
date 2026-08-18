@@ -7,6 +7,7 @@ import {
   contentTypeIds,
   definitionUrl,
   hiddenNotice,
+  resolveUnitUrl,
   splitByContentType,
   type CatalogueInput,
   type RawCollection,
@@ -433,4 +434,11 @@ test('surrounding whitespace is trimmed before matching', () => {
     'Monthly Halcyon',
     'Ad hoc Halcyon',
   ]);
+});
+
+test('resolveUnitUrl maps Units/65 to units/units/65 by id', () => {
+  const units = [{ url: 'https://x/api/units/units/65/', name: 'Mammography' }];
+  expect(
+    resolveUnitUrl('https://x/api/units/Units/65/', units)
+  ).toBe('https://x/api/units/units/65/');
 });

@@ -1,6 +1,7 @@
 import type { Draft, DraftValue } from '../api/types';
 import { getDb } from './schema';
 import { encode, decode } from './codec';
+import { getTests } from './collections';
 
 export async function createSession(
   id: string,
@@ -118,10 +119,14 @@ export async function loadDraft(sessionId: string): Promise<Draft> {
   const s = await db.getFirstAsync<any>(`SELECT * FROM session WHERE id = ?`, [sessionId]);
   if (!s) throw new Error(`No session ${sessionId}`);
   const rows = await db.getAllAsync<any>(`SELECT * FROM value WHERE session_id = ?`, [sessionId]);
+  const types = Object.fromEntries((await getTests(s.utc_url)).map((t) => [t.slug, t.type]));
 
   const values: Record<string, DraftValue> = {};
   for (const r of rows) {
-    values[r.slug] = { value: decode(r.value), comment: r.comment ?? undefined };
+    values[r.slug] = {
+      value: decode(r.value, types[r.slug]),
+      comment: r.comment ?? undefined,
+    };
   }
 
   return {

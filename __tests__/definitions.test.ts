@@ -124,3 +124,13 @@ test('composite and scomposite tests are included for display', async () => {
   expect(out[3]).toMatchObject({ slug: 'avg_dose', type: 'composite' });
   expect(out[4]).toMatchObject({ slug: 'ratio', type: 'scomposite' });
 });
+
+test('string tests are included for download', async () => {
+  const withString: Record<string, any> = {
+    ...payloads,
+    'https://x/tests/4/': { slug: 'notes', name: 'Notes', type: 'string' },
+  };
+  const f = async (url: string) => withString[url];
+  const out = await flattenTestList('https://x/testlists/571/', f);
+  expect(out.find((t) => t.slug === 'notes')).toMatchObject({ type: 'string' });
+});

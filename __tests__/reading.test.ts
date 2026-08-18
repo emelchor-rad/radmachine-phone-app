@@ -189,3 +189,11 @@ test('composite tests are omitted from filled, skipped and invalid', () => {
   expect(s.skipped).toEqual([]);
   expect(s.invalid).toEqual([]);
 });
+
+test('a filled string counts as filled; empty string as skipped', () => {
+  const rows = [{ slug: 'notes', name: 'Notes', type: 'string' as const }];
+  expect(names(summarizeReadings(rows, { notes: { value: 'done' } }, {}).filled)).toEqual([
+    'Notes',
+  ]);
+  expect(names(summarizeReadings(rows, { notes: { value: '' } }, {}).skipped)).toEqual(['Notes']);
+});

@@ -104,6 +104,29 @@ function byUrl(rows: RawNamed[]): Record<string, string> {
   return Object.fromEntries(rows.map((r) => [r.url, r.name]));
 }
 
+/** Trailing numeric id from a RadMachine unit url, if any. */
+function unitIdFromUrl(url: string): string | null {
+  const m = url.match(/\/(\d+)\/?$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Collections sometimes carry .../units/Units/65/ while /units/units/ returns
+ * .../units/units/65/. Match by id so unittestinfo gets a url the API accepts.
+ */
+export function resolveUnitUrl(
+  unitField: string | null,
+  units: RawNamed[]
+): string | null {
+  if (!unitField) return null;
+  const exact = units.find((u) => u.url === unitField);
+  if (exact) return exact.url;
+  const id = unitIdFromUrl(unitField);
+  if (!id) return unitField;
+  const byId = units.find((u) => unitIdFromUrl(u.url) === id);
+  return byId?.url ?? unitField;
+}
+
 export const TEST_LIST = 'qa.testlist';
 export const TEST_LIST_CYCLE = 'qa.testlistcycle';
 
@@ -189,8 +212,18 @@ export function hiddenNotice(h: Hidden): string {
   return parts.length ? `${parts.join('. ')}.` : '';
 }
 
-export function unitLabelFor(url: string | null, names: Record<string, string>): string {
-  return (url && names[url]) || (url ? 'Unknown unit' : 'No unit');
+export function unitLabelFor(
+  url: string | null,
+  names: Record<string, string>,
+  units?: RawNamed[]
+): string {
+  if (!url) return 'No unit';
+  if (names[url]) return names[url];
+  if (units) {
+    const resolved = resolveUnitUrl(url, units);
+    if (resolved && names[resolved]) return names[resolved];
+  }
+  return 'Unknown unit';
 }
 
 export function freqLabelFor(url: string | null, names: Record<string, string>): string {
@@ -240,14 +273,15 @@ export function scheduleRowFor(
   sites: RawNamed[],
   frequencies: RawNamed[]
 ): ScheduleRow | null {
-  const unit = units.find((u) => u.url === row.unit);
-  if (!unit) return null;
-  const site = unit.site ? sites.find((s) => s.url === unit.site) : undefined;
+  const unit = resolveUnitUrl(row.unit, units);
+  const unitRow = unit ? units.find((u) => u.url === unit) : undefined;
+  if (!unitRow) return null;
+  const site = unitRow.site ? sites.find((s) => s.url === unitRow.site) : undefined;
   const freq = row.frequency ? frequencies.find((f) => f.url === row.frequency) : undefined;
   return {
     utcUrl: row.url,
-    unitUrl: unit.url,
-    unitName: unit.name,
+    unitUrl: unitRow.url,
+    unitName: unitRow.name,
     siteUrl: site?.url ?? null,
     siteName: site?.name ?? null,
     frequencyUrl: freq?.url ?? null,
@@ -266,7 +300,7 @@ export function buildCatalogue(input: CatalogueInput): CatalogueView {
 
   const rows: CatalogueRow[] = lists.map((c) => ({
     ...c,
-    unitLabel: unitLabelFor(c.unit, unitNames),
+    unitLabel: unitLabelFor(c.unit, unitNames, input.units),
     freqLabel: freqLabelFor(c.frequency, freqNames),
   }));
 
