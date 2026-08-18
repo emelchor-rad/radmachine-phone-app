@@ -101,7 +101,7 @@ test('a test type v1 cannot render is rejected loudly', async () => {
   await expect(flattenTestList('https://x/testlists/571/', f)).rejects.toThrow(/upload/);
 });
 
-test('composite and s_composite tests are included for display', async () => {
+test('composite and scomposite tests are included for display', async () => {
   const withComposite: Record<string, any> = {
     ...payloads,
     'https://x/tests/4/': { slug: 'avg_dose', name: 'Average dose', type: 'composite' },
@@ -110,7 +110,7 @@ test('composite and s_composite tests are included for display', async () => {
       tests: ['https://x/tests/4/', 'https://x/tests/5/'],
       test_lists: [],
     },
-    'https://x/tests/5/': { slug: 'ratio', name: 'Ratio', type: 's_composite' },
+    'https://x/tests/5/': { slug: 'ratio', name: 'Ratio', type: 'scomposite' },
   };
   const f = async (url: string) => withComposite[url];
   const out = await flattenTestList('https://x/testlists/571/', f);
@@ -122,5 +122,5 @@ test('composite and s_composite tests are included for display', async () => {
     'ratio',
   ]);
   expect(out[3]).toMatchObject({ slug: 'avg_dose', type: 'composite' });
-  expect(out[4]).toMatchObject({ slug: 'ratio', type: 's_composite' });
+  expect(out[4]).toMatchObject({ slug: 'ratio', type: 'scomposite' });
 });

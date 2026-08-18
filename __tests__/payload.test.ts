@@ -73,7 +73,7 @@ test('composite tests are never included in the payload', () => {
   const withComposite: TestDef[] = [
     ...defs,
     { slug: 'avg', name: 'Average', type: 'composite', order: 3, sublist: null },
-    { slug: 'ratio', name: 'Ratio', type: 's_composite', order: 4, sublist: null },
+    { slug: 'ratio', name: 'Ratio', type: 'scomposite', order: 4, sublist: null },
   ];
   const p = buildPayload(withComposite, draft);
   expect(Object.keys(p.tests).sort()).toEqual(['beam_on', 'coll_size', 'odi_at_iso']);

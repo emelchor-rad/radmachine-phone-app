@@ -1,4 +1,4 @@
-export type TestType = 'simple' | 'boolean' | 'composite' | 's_composite';
+export type TestType = 'simple' | 'boolean' | 'composite' | 'scomposite';
 
 /** Types the physicist enters by hand; everything else is server-calculated. */
 export const FILLABLE_TYPES: TestType[] = ['simple', 'boolean'];
@@ -8,7 +8,7 @@ export const DOWNLOADABLE_TYPES: TestType[] = [
   'simple',
   'boolean',
   'composite',
-  's_composite',
+  'scomposite',
 ];
 
 export function isFillableType(type: TestType): boolean {
@@ -16,7 +16,7 @@ export function isFillableType(type: TestType): boolean {
 }
 
 export function isCompositeType(type: TestType): boolean {
-  return type === 'composite' || type === 's_composite';
+  return type === 'composite' || type === 'scomposite';
 }
 
 /** Reference and tolerance downloaded for one test on one unit. */
