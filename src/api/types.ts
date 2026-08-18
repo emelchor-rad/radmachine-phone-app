@@ -1,5 +1,16 @@
 export type TestType = 'simple' | 'boolean';
 
+/** Reference and tolerance downloaded for one test on one unit. */
+export type TestCriteria = {
+  refValue: number;
+  refType: 'numerical' | 'boolean';
+  tolType: 'absolute' | 'percent' | null;
+  actLow: number | null;
+  tolLow: number | null;
+  tolHigh: number | null;
+  actHigh: number | null;
+};
+
 /** One test as stored locally after downloading a definition. */
 export type TestDef = {
   slug: string;
@@ -7,6 +18,9 @@ export type TestDef = {
   type: TestType;
   order: number;          // display order across the whole flattened list
   sublist: string | null; // null for tests at the top level of the list
+  criteria?: TestCriteria;
+  /** Present only while downloading; stripped before SQLite write. */
+  testUrl?: string;
 };
 
 /** What the user has entered so far. */

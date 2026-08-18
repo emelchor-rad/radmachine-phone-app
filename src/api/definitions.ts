@@ -36,7 +36,8 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
   // by the caller for its name, and re-fetching it here would double every
   // round trip on a phone connection.
   const walk = async (list: any, sublistName: string | null): Promise<void> => {
-    for (const testUrl of list.tests ?? []) {
+    for (const rawTestUrl of list.tests ?? []) {
+      const testUrl: string = rawTestUrl;
       const t = await fetchCached(testUrl);
       if (!SUPPORTED.includes(t.type)) {
         throw new Error(
@@ -62,6 +63,7 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
         type: t.type as TestType,
         order: out.length,
         sublist: sublistName,
+        testUrl: testUrl,
       });
     }
 

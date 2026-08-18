@@ -17,7 +17,7 @@ the terminal is only the bundler. `--clear` matters — a new directory is invis
 until its cache is reset, which has cost real debugging time twice.
 
 ```bash
-npm test          # 164 tests, no device needed
+npm test          # 179 tests, no device needed
 npx tsc --noEmit  # must be clean
 ```
 
@@ -27,7 +27,7 @@ newer project outright. Do not upgrade without checking the device first.
 ## How it is built
 
 The rule the whole codebase follows: **all judgement lives in pure functions that run under
-jest on a laptop; the screens and the SQLite wrappers compute nothing.** That is why 164 tests
+jest on a laptop; the screens and the SQLite wrappers compute nothing.** That is why 179 tests
 run in seconds with no device, and why every data-safety bug found so far was caught by a test
 rather than by a physicist.
 
@@ -36,6 +36,7 @@ src/api/       client (RadAuthorization header), catalogue shaping, definition f
                response classification
 src/sync/      payload builder, outbox state machine, drain, schedule refresh, reading parser
 src/schedule/  dueState, unit-card grouping                          <- pure, tested
+src/qa/        offline tolerance evaluation (ok / tolerance / action) <- pure, tested
 src/db/        expo-sqlite stores: collections, sessions, outbox, schedule, codec
 src/secure/    the API token, in the Android keystore
 src/ui/        Dropdown, PassFail, SettingsMenu (core React Native only, no native pickers)
@@ -99,13 +100,14 @@ of what each unit owes. Plus, from user feedback: tab icons, a settings menu, Ra
 frequency tiles, instant appearance after download, pull-to-refresh, a Pass/Fail control that
 can show "not recorded", and Browse reduced to one job.
 
-### Next: v2.1 — tolerance feedback offline
+**v2.1** — offline tolerance feedback on the worksheet (`ok` / `tolerance` / `action`), reference
+and tolerance downloaded with each list, and Browse simplified to filters-only with an automatic
+hand-off to Downloaded after a download.
 
-The app cannot yet tell the physicist that a reading is out of tolerance until it syncs. The
-piece that is missing is downloading each test's **reference and tolerance** alongside its
-definition, evaluating locally, and showing **three levels** — `ok` / `tolerance` / `action`,
-matching RadMachine. That is a new table, a change to the downloader, and a pure evaluator; the
-same shape as the schedule work in `docs/2026-08-17-radmachine-mobile-v2-0-design.md`.
+### Next: v2.2 — broader test-type coverage
+
+Uploads, composites, and cycles — the only phase that changes the sync architecture (the queue
+would carry files).
 
 ### Known gaps carried forward
 

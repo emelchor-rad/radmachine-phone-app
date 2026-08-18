@@ -45,6 +45,13 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       type     TEXT NOT NULL,
       ord      INTEGER NOT NULL,
       sublist  TEXT,
+      ref_value REAL,
+      ref_type  TEXT,
+      tol_type  TEXT,
+      tol_act_low REAL,
+      tol_tol_low REAL,
+      tol_tol_high REAL,
+      tol_act_high REAL,
       PRIMARY KEY (utc_url, slug)
     );
 
@@ -87,5 +94,25 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       refreshed_at   TEXT NOT NULL
     );
   `);
+  await migrateTestCriteria(db);
   return db;
+}
+
+/** Add criteria columns to databases created before v2.1. */
+async function migrateTestCriteria(db: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(test)`);
+  const have = new Set(cols.map((c) => c.name));
+  const add = [
+    'ref_value REAL',
+    'ref_type TEXT',
+    'tol_type TEXT',
+    'tol_act_low REAL',
+    'tol_tol_low REAL',
+    'tol_tol_high REAL',
+    'tol_act_high REAL',
+  ];
+  for (const def of add) {
+    const name = def.split(' ')[0];
+    if (!have.has(name)) await db.execAsync(`ALTER TABLE test ADD COLUMN ${def}`);
+  }
 }

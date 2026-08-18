@@ -22,6 +22,12 @@ import {
   type ReadingSummary,
 } from '../../src/sync/reading';
 import type { TestDef, DraftValue, Draft } from '../../src/api/types';
+import {
+  criteriaLine,
+  evaluateReading,
+  EVAL_COLOUR,
+  EVAL_LABEL,
+} from '../../src/qa/evaluate';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -189,12 +195,24 @@ export default function Worksheet() {
         const header = t.sublist !== lastSublist ? ((lastSublist = t.sublist), t.sublist) : null;
         const v = values[t.slug]?.value ?? null;
         const bad = isInvalidReading(texts[t.slug] ?? '');
+        const level = evaluateReading(t.type, v, t.criteria);
+        const levelColour = EVAL_COLOUR[level];
+        const levelLabel = EVAL_LABEL[level];
+        const refLine = criteriaLine(t.criteria);
         return (
           <View key={t.slug}>
             {header ? (
               <Text style={{ fontWeight: 'bold', marginTop: 12 }}>{header}</Text>
             ) : null}
             <Text>{t.name}</Text>
+            {refLine ? (
+              <Text style={{ color: '#555', fontSize: 12 }}>{refLine}</Text>
+            ) : null}
+            {levelLabel && levelColour ? (
+              <Text style={{ color: levelColour, fontSize: 12, fontWeight: 'bold' }}>
+                {levelLabel}
+              </Text>
+            ) : null}
             {t.type === 'boolean' ? (
               // null is a real, visible state here, not a fallback: it is what
               // buildPayload sends as {skipped: true} and what the pre-submit
@@ -215,8 +233,8 @@ export default function Worksheet() {
                     onChangeText={(txt) => updateNumber(t.slug, txt)}
                     accessibilityLabel={t.name}
                     style={{
-                      borderWidth: bad ? 2 : 1,
-                      borderColor: bad ? DANGER : '#888',
+                      borderWidth: bad ? 2 : levelColour ? 2 : 1,
+                      borderColor: bad ? DANGER : levelColour ?? '#888',
                       backgroundColor: bad ? '#fdecef' : 'transparent',
                       padding: 8,
                       flex: 1,
