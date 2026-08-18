@@ -47,10 +47,12 @@ export type ReadingSummary<T extends NamedTest> = {
  * to submit while `invalid` is non-empty, and must name `skipped` out loud.
  *
  * `texts` is the raw typed text per slug (numeric fields only); `values` is
- * what was persisted. Booleans never appear in `texts`, so a switch left at
- * "No" lands in `filled` (value false was recorded) and a switch never touched
- * lands in `skipped` -- the two look identical on screen, which is exactly the
- * confusion the summary exists to expose.
+ * what was persisted. Booleans never appear in `texts`, so one recorded as Fail
+ * lands in `filled` (false is a reading) while one never touched lands in
+ * `skipped`. The Pass/Fail control now shows that difference on screen too, but
+ * the summary still names it: seeing a control is not the same as noticing it,
+ * and the last chance to catch an unrecorded safety check is the moment before
+ * it is submitted.
  */
 export function summarizeReadings<T extends NamedTest>(
   defs: readonly T[],
