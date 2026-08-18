@@ -306,6 +306,14 @@ export default function Catalogue() {
         style={{ flex: 1, marginTop: 4 }}
         data={view.visible}
         keyExtractor={(i) => i.url}
+        // Not decorative. The rows are drawn from `view.visible`, which does not
+        // change when a download finishes -- only `downloaded` does, and
+        // VirtualizedList's cells skip a re-render on unchanged data. Without
+        // this the row a user just downloaded keeps its Download button until
+        // something else happens to rebuild the list, which reads as the
+        // download having failed. A new Set per load, so the identity check
+        // fires.
+        extraData={downloaded}
         // Dismiss the keyboard on the first drag: the box takes half the screen
         // on a phone, and the results it filtered are what the user is reaching
         // for.
