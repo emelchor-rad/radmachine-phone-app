@@ -24,6 +24,18 @@ npx tsc --noEmit  # must be clean
 **Expo SDK 54 is pinned deliberately.** The target phone runs Expo Go 54.0.8, which refuses a
 newer project outright. Do not upgrade without checking the device first.
 
+### "Something went wrong" after scanning the QR
+
+1. **Pull latest** — stale `index.ts` / `App.tsx` make Metro bundle the wrong app. They must be
+   deleted; `package.json` `"main"` must be `expo-router/entry`.
+2. **Clear Metro cache** — `npx expo start --clear`, not plain `expo start`.
+3. **Do not install `react-native-reanimated` by hand** — without `react-native-worklets`, Babel
+   fails with `Cannot find module 'react-native-worklets/plugin'` and Expo Go shows a generic
+   error. This project does not use Reanimated; remove it from `package.json` if it appeared.
+4. **Same Wi-Fi** — phone and PC on the same network, or use `npx expo start --clear --tunnel`.
+5. **Read the on-screen error** — a startup crash now shows the message on the phone. Copy that
+   text if it still fails.
+
 ## How it is built
 
 The rule the whole codebase follows: **all judgement lives in pure functions that run under
