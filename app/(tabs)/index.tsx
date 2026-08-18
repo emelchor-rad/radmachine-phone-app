@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Dropdown, type Option } from '../../src/ui/Dropdown';
 import { lastRefreshedAt, listSchedule } from '../../src/db/schedule';
 import { allRows } from '../../src/db/outbox';
 import { ALL, buildUnitCards, type ScheduleRow } from '../../src/schedule/summary';
+import { refreshSchedule } from '../../src/sync/refresh';
 
 const DANGER = '#b00020';
 const WARN = '#8a6d00';
@@ -30,21 +31,43 @@ export default function Dashboard() {
   const [site, setSite] = useState<string>(ALL);
   const [msg, setMsg] = useState('');
 
+  /** One read of everything this screen shows, all of it local. */
+  const load = useCallback(async () => {
+    try {
+      setMsg('');
+      setRows(await listSchedule());
+      setRefreshed(await lastRefreshedAt());
+      const out = await allRows();
+      setUnsent(out.filter((r) => r.status !== 'sent').length);
+    } catch (e: any) {
+      setMsg(`Could not read the dashboard: ${e?.message ?? e}`);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        try {
-          setMsg('');
-          setRows(await listSchedule());
-          setRefreshed(await lastRefreshedAt());
-          const out = await allRows();
-          setUnsent(out.filter((r) => r.status !== 'sent').length);
-        } catch (e: any) {
-          setMsg(`Could not read the dashboard: ${e?.message ?? e}`);
-        }
-      })();
-    }, [])
+      load();
+    }, [load])
   );
+
+  /**
+   * Pull down to fetch new due dates.
+   *
+   * The automatic refresh rides on connectivity and foreground events, which is
+   * right for walking out of a bunker but leaves no way to ask for fresh
+   * numbers while simply standing there with signal.
+   */
+  const [refreshing, setRefreshing] = useState(false);
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshSchedule(new Date().toISOString());
+    } catch (e: any) {
+      setMsg(`Could not refresh the schedule: ${e?.message ?? e}`);
+    }
+    await load();
+    setRefreshing(false);
+  };
 
   const now = new Date();
   const cards = useMemo(() => buildUnitCards(rows, now, site), [rows, site]);
@@ -64,7 +87,10 @@ export default function Dashboard() {
     router.push({ pathname: '/downloaded', params: { unitUrl, frequencyName } });
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <ScrollView
+      contentContainerStyle={{ padding: 16, gap: 12 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />}
+    >
       {siteOptions.length > 1 ? (
         <Dropdown label="Site" options={siteOptions} value={site} onSelect={setSite} />
       ) : null}

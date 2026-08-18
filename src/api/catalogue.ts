@@ -8,6 +8,8 @@
  * tests rather than a hand check on a phone.
  */
 
+import type { ScheduleRow } from '../schedule/summary';
+
 /**
  * Filter sentinels.
  *
@@ -28,10 +30,24 @@ export type RawCollection = {
   /** Url of the django ContentType naming what object_id points at. */
   content_type: string | null;
   object_id: number;
+  /**
+   * When this collection is next due, as the UTC payload reports it.
+   *
+   * Nothing on the browse screen shows it. It is carried through so that
+   * downloading a list can write its own schedule row from the payload already
+   * in hand -- see scheduleRowFor below. Optional because a serializer that
+   * omits it must degrade to "no due date", not to a broken row.
+   */
+  due_date?: string | null;
 };
 
-/** A /units/units/ or /qa/frequencies/ row, reduced to what is used. */
-export type RawNamed = { url: string; name: string };
+/**
+ * A /units/units/, /units/sites/ or /qa/frequencies/ row, reduced to what is used.
+ *
+ * `site` only ever appears on a unit, and is only read when a download writes
+ * its own schedule row.
+ */
+export type RawNamed = { url: string; name: string; site?: string | null };
 
 /** A /contenttypes/contenttypes/ row. */
 export type RawContentType = { url: string; app_label?: string; model?: string };
@@ -166,6 +182,46 @@ export function unitLabelFor(url: string | null, names: Record<string, string>):
 
 export function freqLabelFor(url: string | null, names: Record<string, string>): string {
   return url ? names[url] || 'Unknown frequency' : 'ad hoc';
+}
+
+/**
+ * The schedule row a just-downloaded collection deserves, from the browse
+ * payload alone.
+ *
+ * The Downloaded tab renders the SCHEDULE table, not the collection table, so a
+ * list downloaded right now has nothing to show there until refreshSchedule()
+ * next runs -- and that only happens on a connectivity or app-foreground event.
+ * Browse has already fetched every field a schedule row needs, so the download
+ * writes the row itself and the list appears at once, offline, with no extra
+ * request.
+ *
+ * Deliberately mirrors buildScheduleRows in src/sync/refresh.ts field for field,
+ * INCLUDING its refusals: an unresolvable unit returns null rather than a row
+ * attributing a list to the wrong machine, and an unresolvable frequency costs
+ * only the grouping. A test pins the two functions together, because the point
+ * of the parity is that the next refresh rewrites this row with the same values
+ * instead of visibly changing it under the user.
+ */
+export function scheduleRowFor(
+  row: RawCollection,
+  units: RawNamed[],
+  sites: RawNamed[],
+  frequencies: RawNamed[]
+): ScheduleRow | null {
+  const unit = units.find((u) => u.url === row.unit);
+  if (!unit) return null;
+  const site = unit.site ? sites.find((s) => s.url === unit.site) : undefined;
+  const freq = row.frequency ? frequencies.find((f) => f.url === row.frequency) : undefined;
+  return {
+    utcUrl: row.url,
+    unitUrl: unit.url,
+    unitName: unit.name,
+    siteUrl: site?.url ?? null,
+    siteName: site?.name ?? null,
+    frequencyUrl: freq?.url ?? null,
+    frequencyName: freq?.name ?? null,
+    dueDate: row.due_date ?? null,
+  };
 }
 
 export function buildCatalogue(input: CatalogueInput): CatalogueView {

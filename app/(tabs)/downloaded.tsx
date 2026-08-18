@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Button, FlatList, Text, View } from 'react-native';
+import { Button, FlatList, RefreshControl, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { Dropdown, type Option } from '../../src/ui/Dropdown';
@@ -20,6 +20,7 @@ import {
   frequencyFilterFor,
   type ScheduleRow,
 } from '../../src/schedule/summary';
+import { refreshSchedule } from '../../src/sync/refresh';
 import { nowStamp } from '../../src/sync/time';
 
 const DANGER = '#b00020';
@@ -109,44 +110,73 @@ export default function Downloaded() {
     }, [paramUnit, paramFreq])
   );
 
+  /**
+   * Read everything this screen shows, from local storage only.
+   *
+   * Extracted so the focus effect and the pull-to-refresh gesture run exactly
+   * the same read -- two copies would drift, and the one used less often would
+   * be the one that broke.
+   */
+  const load = useCallback(async () => {
+    try {
+      setMsg('');
+      const [rows, collections, drafts, unsent] = await Promise.all([
+        listSchedule(),
+        listCollections(),
+        listDrafts(),
+        listUnsentByUtc(),
+      ]);
+      const names: Record<string, string> = {};
+      for (const c of collections) names[c.utcUrl] = c.utcName;
+      // listDrafts is newest first, so the first one seen per list is the one
+      // to resume.
+      const byUtc: Record<string, DraftSummary> = {};
+      for (const d of drafts) byUtc[d.utcUrl] ??= d;
+      const scheduled = new Set(rows.map((r) => r.utcUrl));
+      setLib({
+        rows,
+        names,
+        drafts: byUtc,
+        unsent,
+        missing: collections.filter((c) => !scheduled.has(c.utcUrl)).length,
+      });
+    } catch (e: any) {
+      // A failed read that rendered an empty list would be indistinguishable
+      // from having downloaded nothing, and the second is acted on very
+      // differently from the first.
+      setLib(EMPTY);
+      setMsg(`Could not read the downloaded lists: ${e?.message ?? e}`);
+    }
+  }, []);
+
+  // Reloaded on focus, not just on mount: a session finished on the worksheet
+  // or drained on the queue screen changes what belongs beside these rows, and
+  // a stale marker here is a physicist repeating work.
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        // Reloaded on focus, not just on mount: a session finished on the
-        // worksheet or drained on the queue screen changes what belongs beside
-        // these rows, and a stale marker here is a physicist repeating work.
-        try {
-          setMsg('');
-          const [rows, collections, drafts, unsent] = await Promise.all([
-            listSchedule(),
-            listCollections(),
-            listDrafts(),
-            listUnsentByUtc(),
-          ]);
-          const names: Record<string, string> = {};
-          for (const c of collections) names[c.utcUrl] = c.utcName;
-          // listDrafts is newest first, so the first one seen per list is the
-          // one to resume.
-          const byUtc: Record<string, DraftSummary> = {};
-          for (const d of drafts) byUtc[d.utcUrl] ??= d;
-          const scheduled = new Set(rows.map((r) => r.utcUrl));
-          setLib({
-            rows,
-            names,
-            drafts: byUtc,
-            unsent,
-            missing: collections.filter((c) => !scheduled.has(c.utcUrl)).length,
-          });
-        } catch (e: any) {
-          // A failed read that rendered an empty list would be indistinguishable
-          // from having downloaded nothing, and the second is acted on very
-          // differently from the first.
-          setLib(EMPTY);
-          setMsg(`Could not read the downloaded lists: ${e?.message ?? e}`);
-        }
-      })();
-    }, [])
+      load();
+    }, [load])
   );
+
+  /**
+   * Pull down to fetch new due dates.
+   *
+   * Downloading a list already writes its own schedule row, so this is not the
+   * only way rows appear -- it is the way to learn that something became due
+   * since the last sync, without waiting for a connectivity event to fire.
+   */
+  const [refreshing, setRefreshing] = useState(false);
+  const pullToRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshSchedule(new Date().toISOString());
+    } catch (e: any) {
+      // Refusing silently would look like the gesture did nothing at all.
+      setMsg(`Could not refresh the schedule: ${e?.message ?? e}`);
+    }
+    await load();
+    setRefreshing(false);
+  };
 
   const unitOptions: Option[] = useMemo(() => {
     const seen = new Map<string, string>();
@@ -276,6 +306,9 @@ export default function Downloaded() {
 
       <FlatList
         style={{ flex: 1, marginTop: 4 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={pullToRefresh} />
+        }
         data={visible}
         keyExtractor={(r) => r.utcUrl}
         ListEmptyComponent={

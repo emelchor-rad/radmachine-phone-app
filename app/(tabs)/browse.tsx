@@ -8,12 +8,14 @@ import {
   ALL,
   buildCatalogue,
   definitionUrl,
+  scheduleRowFor,
   type CatalogueRow,
   type RawCollection,
   type RawContentType,
   type RawNamed,
 } from '../../src/api/catalogue';
 import { listCollections, saveCollection, type Collection } from '../../src/db/collections';
+import { upsertScheduleRow } from '../../src/db/schedule';
 import { createSession, listDrafts, type DraftSummary } from '../../src/db/sessions';
 import { loadCredentials } from '../../src/secure/credentials';
 import { nowStamp } from '../../src/sync/time';
@@ -23,6 +25,11 @@ import { Dropdown } from '../../src/ui/Dropdown';
 type Browsed = {
   collections: RawCollection[];
   units: RawNamed[];
+  /**
+   * Sites, only so that a download can name the site its unit belongs to when it
+   * writes its own schedule row. Nothing on this screen displays them.
+   */
+  sites: RawNamed[];
   frequencies: RawNamed[];
   contentTypes: RawContentType[];
   /**
@@ -31,14 +38,22 @@ type Browsed = {
    * download() refuses rather than resolve them against new credentials.
    */
   baseUrl: string;
+  /**
+   * When this pass was read from the server, ISO. It becomes the schedule row's
+   * refreshed_at, so the dashboard's staleness line reports when the due dates
+   * were actually fetched rather than when the file happened to be written.
+   */
+  fetchedAt: string;
 };
 
 const EMPTY: Browsed = {
   collections: [],
   units: [],
+  sites: [],
   frequencies: [],
   contentTypes: [],
   baseUrl: '',
+  fetchedAt: '',
 };
 
 /**
@@ -102,16 +117,30 @@ export default function Catalogue() {
       // limit/offset pagination, so it turns 34 round-trips into 2 on a phone.
       // If the server ignores or clamps it, getAll still follows `next`.
       const page = { limit: '200' };
-      const [collections, units, frequencies, contentTypes] = await Promise.all([
+      const [collections, units, sites, frequencies, contentTypes] = await Promise.all([
         c.getAll<RawCollection>('/qa/unittestcollections/', page),
         c.getAll<RawNamed>('/units/units/', page),
+        // Sites are never displayed here. They are fetched so that downloading
+        // a list can name the site its unit belongs to when it writes its own
+        // schedule row, without a second round trip at download time.
+        c.getAll<RawNamed>('/units/sites/', page),
         c.getAll<RawNamed>('/qa/frequencies/', page),
         // Needed to tell a test list from a test list cycle. Without it every
         // collection is unresolved, and buildCatalogue then shows none -- which
         // is the intended failure: refusing beats downloading the wrong list.
         c.getAll<RawContentType>('/contenttypes/contenttypes/', page),
       ]);
-      setBrowsed({ collections, units, frequencies, contentTypes, baseUrl: creds.baseUrl });
+      setBrowsed({
+        collections,
+        units,
+        sites,
+        frequencies,
+        contentTypes,
+        baseUrl: creds.baseUrl,
+        // Stamped when the pass was READ, so a schedule row written at download
+        // time reports when its due date was actually fetched.
+        fetchedAt: new Date().toISOString(),
+      });
       // A filter kept from a previous browse may name a unit that is no longer
       // in the list, which would read as "0 of 336" and look like breakage.
       setUnitFilter(ALL);
@@ -158,6 +187,20 @@ export default function Catalogue() {
         },
         tests
       );
+      // Write this list's schedule row now, rather than waiting for the next
+      // refresh. Downloaded renders from the schedule table, so without this a
+      // finished download shows nothing there until a connectivity or
+      // foreground event happens to fire -- which reads as the download having
+      // failed. Everything the row needs was already fetched by browse(), so
+      // this costs no extra request.
+      const raw = browsed.collections.find((r) => r.url === utc.url);
+      const scheduleRow = raw
+        ? scheduleRowFor(raw, browsed.units, browsed.sites, browsed.frequencies)
+        : null;
+      // A null row means the unit did not resolve, and scheduleRowFor refuses
+      // rather than guess. The list is still downloaded and usable; it simply
+      // waits for the next full refresh to gain a schedule row.
+      if (scheduleRow) await upsertScheduleRow(scheduleRow, browsed.fetchedAt);
       setLocal(await listCollections());
       setMsg(`Saved ${tests.length} tests.`);
     } catch (e: any) {

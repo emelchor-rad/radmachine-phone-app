@@ -26,6 +26,37 @@ export async function saveSchedule(rows: ScheduleRow[], refreshedAt: string): Pr
   });
 }
 
+/**
+ * Write ONE schedule row, leaving every other row alone.
+ *
+ * Deliberately not a mode of saveSchedule, because the two answer different
+ * questions and the difference is the whole point. A refresh is a whole-table
+ * SNAPSHOT: every row was read in the same pass, so replacing the table is what
+ * keeps them one moment. A download is one row learned EARLY -- the schedule
+ * data for the list the user just pulled down, known before the next refresh
+ * happens -- and it must not disturb rows it knows nothing about. Folding them
+ * into one function would either make a refresh leave stale rows behind or make
+ * a download wipe the table down to a single list.
+ *
+ * `refreshedAt` is when the data behind this row was READ from the server, not
+ * when it was written, so the dashboard's staleness line stays true.
+ *
+ * utc_url is the primary key, so downloading the same list twice replaces its
+ * row rather than duplicating it, and a later refresh overwrites it in turn.
+ */
+export async function upsertScheduleRow(r: ScheduleRow, refreshedAt: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO schedule (utc_url, unit_url, unit_name, site_url, site_name,
+                                      frequency_url, frequency_name, due_date, refreshed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      r.utcUrl, r.unitUrl, r.unitName, r.siteUrl, r.siteName,
+      r.frequencyUrl, r.frequencyName, r.dueDate, refreshedAt,
+    ]
+  );
+}
+
 export async function listSchedule(): Promise<ScheduleRow[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<any>(`SELECT * FROM schedule`);
@@ -41,9 +72,25 @@ export async function listSchedule(): Promise<ScheduleRow[]> {
   }));
 }
 
-/** When the schedule was last refreshed, or null if it never has been. */
+/**
+ * When the schedule was last refreshed, or null if it never has been.
+ *
+ * The OLDEST row, not an arbitrary one. Rows no longer necessarily share a
+ * refreshed_at now that upsertScheduleRow writes one row at a time: a `LIMIT 1`
+ * with no ORDER BY would report whichever row SQLite scanned first, and taking
+ * the newest would let a single just-downloaded list make a week-old dashboard
+ * read "synced just now". The oldest row is the honest answer to "how stale can
+ * anything on this screen be?".
+ *
+ * MIN over the stamps is chronological because every writer stores an ISO-8601
+ * UTC string, where lexicographic and chronological order coincide.
+ */
 export async function lastRefreshedAt(): Promise<string | null> {
   const db = await getDb();
-  const r = await db.getFirstAsync<any>(`SELECT refreshed_at FROM schedule LIMIT 1`);
+  // MIN over an empty table yields one row holding NULL, which falls through to
+  // null -- the same "never synced" the dashboard already renders.
+  const r = await db.getFirstAsync<any>(
+    `SELECT MIN(refreshed_at) AS refreshed_at FROM schedule`
+  );
   return r?.refreshed_at ?? null;
 }
