@@ -128,25 +128,57 @@ export default function Dashboard() {
           <Text style={{ color: c.overdueTotal > 0 ? DANGER : '#555' }}>
             {c.dueTotal} due or overdue
           </Text>
-          {c.rows.map((r) => (
-            <Pressable
-              key={r.frequencyName}
-              onPress={() => open(c.unitUrl, r.frequencyName)}
-              style={{
-                paddingVertical: 8,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                borderTopWidth: 1,
-                borderTopColor: '#eee',
-              }}
-            >
-              <Text>{r.frequencyName}</Text>
-              <Text style={{ color: r.overdue > 0 ? DANGER : '#333' }}>
-                {r.total}
-                {r.overdue > 0 ? ` (${r.overdue} overdue)` : ''}
-              </Text>
-            </Pressable>
-          ))}
+          {/* Tiles that wrap, the way RadMachine's own unit card reads: the
+              frequency, then the count big enough to take in at arm's length.
+              flexBasis 96 with flexGrow 1 rather than a fixed column count --
+              three fit across a 360dp phone, and a unit with five frequencies
+              spills onto a second line instead of squeezing all five flat. */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+            {c.rows.map((r) => (
+              <Pressable
+                key={r.frequencyName}
+                onPress={() => open(c.unitUrl, r.frequencyName)}
+                style={{
+                  flexGrow: 1,
+                  flexBasis: 96,
+                  borderWidth: 1,
+                  borderColor: '#ddd',
+                  borderRadius: 6,
+                  paddingVertical: 10,
+                  paddingHorizontal: 6,
+                  alignItems: 'center',
+                }}
+              >
+                {/* Two lines, not one: "Semi-annually" ellipsised to
+                    "Semi-annua..." in a 96dp tile would hide which control the
+                    number belongs to. */}
+                <Text
+                  numberOfLines={2}
+                  style={{ fontSize: 12, color: '#555', textAlign: 'center' }}
+                >
+                  {r.frequencyName}
+                </Text>
+                {/* The big number is the TOTAL due or overdue. The overdue count
+                    keeps its own line below because the two call for different
+                    action -- three days late is not the same as due this
+                    morning -- and it is absent, not zero, when nothing is late. */}
+                <Text
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 'bold',
+                    color: r.overdue > 0 ? DANGER : '#333',
+                  }}
+                >
+                  {r.total}
+                </Text>
+                {r.overdue > 0 ? (
+                  <Text style={{ fontSize: 11, color: DANGER, textAlign: 'center' }}>
+                    {r.overdue} overdue
+                  </Text>
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
         </View>
       ))}
     </ScrollView>
