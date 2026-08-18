@@ -18,6 +18,23 @@ If port 8081 is stuck (common when Claude or an old terminal still holds it):
 npm run start:alt
 ```
 
+**Cursor integrated terminal (Windows):** if external PowerShell already runs Expo on 8081,
+Cursor will report the port as busy — that is expected; only one Metro bundler can use a port.
+Either keep using the PowerShell window that works, or stop it and start here. To run both
+terminals without fighting over 8081, use the Cursor-only port:
+
+```bash
+npm run start:cursor
+```
+
+To free stuck ports from **any** terminal (Git Bash, cmd, or Cursor — not only PowerShell):
+
+```bash
+npm run kill-ports
+```
+
+Wait 5 seconds, then `npm run start:clean` or `npm run start:cursor`.
+
 Scan the QR with **Expo Go** on an Android phone on the same Wi-Fi. The app runs on the phone;
 the terminal is only the bundler. `--clear` matters — a new directory is invisible to Metro
 until its cache is reset, which has cost real debugging time twice.

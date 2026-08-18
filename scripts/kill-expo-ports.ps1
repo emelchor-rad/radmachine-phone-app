@@ -1,5 +1,6 @@
 # Free the ports Expo/Metro use on Windows.
-# Run in PowerShell:  .\scripts\kill-expo-ports.ps1
+# Run from PowerShell:  .\scripts\kill-expo-ports.ps1
+# Or from any terminal:  npm run kill-ports
 #
 # Killing one PID is often not enough: node spawns child processes and Claude's
 # old session may hold 8081, 8082, 19000 and 19001 at once.

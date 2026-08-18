@@ -30,6 +30,8 @@
     "start": "expo start",
     "start:clean": "expo start --clear --port 8081",
     "start:alt": "expo start --clear --port 8090",
+    "start:cursor": "expo start --clear --port 8090",
+    "kill-ports": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-expo-ports.ps1",
     "test": "jest",
     "android": "expo start --android",
     "ios": "expo start --ios",
