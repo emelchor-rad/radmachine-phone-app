@@ -9,12 +9,22 @@ Proof of concept. Single user, sandbox tenant `emelchor`, run through Expo Go.
 
 ```bash
 npm install
-npx expo start --clear
+npm run start:clean
+```
+
+If port 8081 is stuck (common when Claude or an old terminal still holds it):
+
+```bash
+npm run start:alt
 ```
 
 Scan the QR with **Expo Go** on an Android phone on the same Wi-Fi. The app runs on the phone;
 the terminal is only the bundler. `--clear` matters — a new directory is invisible to Metro
 until its cache is reset, which has cost real debugging time twice.
+
+**Windows — port still occupied after taskkill:** run `.\scripts\kill-expo-ports.ps1` in
+PowerShell (from the project folder), wait 5 seconds, then `npm run start:clean`. Expo uses
+8081 (Metro) plus 19000/19001; all of them must be free, or use `npm run start:alt` on 8090.
 
 ```bash
 npm test          # 179 tests, no device needed
