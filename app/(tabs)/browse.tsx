@@ -239,18 +239,10 @@ export default function Catalogue() {
 
   return (
     <View style={{ padding: 12, flex: 1 }}>
-      {/* One row, so the lists below keep the screen on a small phone. */}
-      <View style={{ flexDirection: 'row', gap: 6 }}>
-        <View style={{ flex: 1 }}>
-          <Button title="Connection" onPress={() => router.push('/connect')} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button title="Queue" onPress={() => router.push('/queue')} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button title="Browse" onPress={browse} />
-        </View>
-      </View>
+      {/* Browse is the only action that belongs to this screen. Connection and
+          Queue moved to the gear in the header, where they are reachable from
+          every tab instead of only this one. */}
+      <Button title="Browse" onPress={browse} />
       {msg ? <Text style={{ paddingVertical: 4 }}>{msg}</Text> : null}
 
       {/* Hidden entirely when there are none, so the normal screen is unchanged.
