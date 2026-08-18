@@ -339,3 +339,98 @@ test('an unnameable unit or frequency says so instead of rendering a url', () =>
   });
   expect(v.rows[1]).toMatchObject({ unitLabel: 'No unit', freqLabel: 'ad hoc' });
 });
+
+// --- text search -----------------------------------------------------------
+
+test('search matches case-insensitively', () => {
+  // The physicist types in a hurry with the phone's autocapitalise off; the
+  // instance names lists in Title Case. Neither side may decide the match.
+  expect(view({ search: 'daily truebeam' }).visible.map((r) => r.name)).toEqual([
+    'Daily TrueBeam',
+  ]);
+  expect(view({ search: 'DAILY TRUEBEAM' }).visible.map((r) => r.name)).toEqual([
+    'Daily TrueBeam',
+  ]);
+  expect(view({ search: 'HaLcYoN' }).visible.map((r) => r.name)).toEqual([
+    'Monthly Halcyon',
+    'Ad hoc Halcyon',
+  ]);
+});
+
+test('search matches a substring anywhere in the name, not just the start', () => {
+  // Names on the instance are prefixed by convention, so a prefix-only match
+  // would make the box useless for exactly the word the user remembers.
+  expect(view({ search: 'hoc' }).visible.map((r) => r.name)).toEqual(['Ad hoc Halcyon']);
+  expect(view({ search: 'ueBea' }).visible.map((r) => r.name)).toEqual(['Daily TrueBeam']);
+});
+
+test('an empty search matches everything', () => {
+  const all = view().visible.map((r) => r.name);
+  expect(view({ search: '' }).visible.map((r) => r.name)).toEqual(all);
+  // Absent entirely, and whitespace only -- the second is what the box holds
+  // after the user clears it with the space bar rather than the clear control.
+  expect(view({ search: undefined }).visible.map((r) => r.name)).toEqual(all);
+  expect(view({ search: '   ' }).visible.map((r) => r.name)).toEqual(all);
+});
+
+test('search narrows the unit filter rather than replacing it', () => {
+  // 'Halcyon' alone matches two rows; with the TrueBeam unit selected it must
+  // match none, not jump the filter.
+  expect(view({ unitFilter: U2, search: 'halcyon' }).visible.map((r) => r.name)).toEqual([
+    'Monthly Halcyon',
+    'Ad hoc Halcyon',
+  ]);
+  expect(view({ unitFilter: U1, search: 'halcyon' }).visible).toEqual([]);
+  // And the unit filter still bites when the search matches everything.
+  expect(view({ unitFilter: U1, search: 'a' }).visible.map((r) => r.name)).toEqual([
+    'Daily TrueBeam',
+  ]);
+});
+
+test('search narrows the frequency filter rather than replacing it', () => {
+  expect(view({ freqFilter: F_MONTHLY, search: 'halcyon' }).visible.map((r) => r.name)).toEqual([
+    'Monthly Halcyon',
+  ]);
+  expect(view({ freqFilter: NO_FREQ, search: 'halcyon' }).visible.map((r) => r.name)).toEqual([
+    'Ad hoc Halcyon',
+  ]);
+  expect(view({ freqFilter: F_DAILY, search: 'halcyon' }).visible).toEqual([]);
+});
+
+test('search intersects both dropdowns at once', () => {
+  expect(
+    view({ unitFilter: U2, freqFilter: NO_FREQ, search: 'HALCYON' }).visible.map((r) => r.name)
+  ).toEqual(['Ad hoc Halcyon']);
+  expect(view({ unitFilter: U2, freqFilter: NO_FREQ, search: 'truebeam' }).visible).toEqual([]);
+});
+
+test('search never reaches a hidden cycle', () => {
+  // Searching is not a way round splitByContentType: the cycle is not in rows
+  // at all, so no query can surface it.
+  expect(view({ search: 'weekly cycle' }).visible).toEqual([]);
+});
+
+test('search narrows visible only, leaving rows and the dropdown options intact', () => {
+  // The count line reads "visible of rows", and the dropdowns are built from
+  // rows: rebuilding them from the search would make units vanish as the user
+  // types and the "N of M" line stop meaning anything.
+  const v = view({ search: 'truebeam' });
+  expect(v.visible).toHaveLength(1);
+  expect(v.rows).toHaveLength(3);
+  expect(v.unitOptions).toEqual(view().unitOptions);
+  expect(v.freqOptions).toEqual(view().freqOptions);
+  expect(v.hidden).toEqual({ cycles: 1, unresolved: 0 });
+});
+
+test('a search matching nothing yields an empty list, not everything', () => {
+  expect(view({ search: 'no list is called this' }).visible).toEqual([]);
+});
+
+test('surrounding whitespace is trimmed before matching', () => {
+  // Phone keyboards append a space after a word completion; without the trim
+  // the list empties on a query the user considers finished.
+  expect(view({ search: '  halcyon ' }).visible.map((r) => r.name)).toEqual([
+    'Monthly Halcyon',
+    'Ad hoc Halcyon',
+  ]);
+});

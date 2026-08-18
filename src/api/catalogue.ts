@@ -85,6 +85,19 @@ export type CatalogueInput = {
   contentTypes: RawContentType[];
   unitFilter: string;
   freqFilter: string;
+  /**
+   * Free text typed by the user, matched against the collection name.
+   *
+   * A THIRD filter, intersected with the two dropdowns -- never a replacement
+   * for them. A search that ignored the selected unit would quietly show a list
+   * belonging to another machine under a unit-filtered heading, which is the
+   * same wrong-list-in-a-bunker failure the content type check exists to
+   * prevent, arrived at through the keyboard.
+   *
+   * Optional, and absent means "no search": a screen that has not rendered the
+   * box yet must behave exactly as it did before.
+   */
+  search?: string;
 };
 
 function byUrl(rows: RawNamed[]): Record<string, string> {
@@ -185,6 +198,25 @@ export function freqLabelFor(url: string | null, names: Record<string, string>):
 }
 
 /**
+ * Does this row's name match what the user typed?
+ *
+ * Case-insensitive substring, on the name ALONE -- the one string the row
+ * displays as its identity. Matching the unit or frequency label too would make
+ * typing a machine name silently widen the unit dropdown's selection, which is
+ * the opposite of what the dropdown was just set to.
+ *
+ * Trimmed, because a phone keyboard appends a space after a word completion and
+ * an untrimmed query would empty the list on a search the user considers
+ * finished. Empty or absent matches everything: the box starts empty, and a
+ * screen with no search box at all must behave as it did before.
+ */
+export function matchesSearch(row: CatalogueRow, search: string | undefined): boolean {
+  const q = (search ?? '').trim().toLowerCase();
+  if (!q) return true;
+  return row.name.toLowerCase().includes(q);
+}
+
+/**
  * The schedule row a just-downloaded collection deserves, from the browse
  * payload alone.
  *
@@ -263,7 +295,11 @@ export function buildCatalogue(input: CatalogueInput): CatalogueView {
       .sort((a, b) => a.label.localeCompare(b.label)),
   ];
 
+  // Search narrows `visible` only. `rows` and both option lists stay built from
+  // everything downloadable, so units do not vanish from the dropdown as the
+  // user types and the "N of M" line keeps meaning "shown of available".
   const visible = rows.filter((r) => {
+    if (!matchesSearch(r, input.search)) return false;
     if (input.unitFilter !== ALL && r.unit !== input.unitFilter) return false;
     if (input.freqFilter === ALL) return true;
     if (input.freqFilter === NO_FREQ) return !r.frequency;

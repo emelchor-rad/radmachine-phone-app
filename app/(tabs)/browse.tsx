@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Button, FlatList, Text, View } from 'react-native';
+import { Button, FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import * as Crypto from 'expo-crypto';
 import { RadClient } from '../../src/api/client';
 import { flattenTestList } from '../../src/api/definitions';
 import {
@@ -14,12 +13,14 @@ import {
   type RawContentType,
   type RawNamed,
 } from '../../src/api/catalogue';
-import { listCollections, saveCollection, type Collection } from '../../src/db/collections';
+import { listCollections, saveCollection } from '../../src/db/collections';
 import { upsertScheduleRow } from '../../src/db/schedule';
-import { createSession, listDrafts, type DraftSummary } from '../../src/db/sessions';
 import { loadCredentials } from '../../src/secure/credentials';
 import { nowStamp } from '../../src/sync/time';
 import { Dropdown } from '../../src/ui/Dropdown';
+
+const MUTED = '#666';
+const DONE = '#1b6b2f';
 
 /** Everything one browse pass fetched, kept together. */
 type Browsed = {
@@ -57,48 +58,54 @@ const EMPTY: Browsed = {
 };
 
 /**
- * How a draft names its worksheet.
+ * Browse does ONE thing: find a list on the instance and download it.
  *
- * Both fields come from a LEFT JOIN, so both are null together when the
- * collection is no longer downloaded. One sentence about that is clearer than two
- * independent fallbacks reading "Unknown unit — list no longer downloaded", and
- * it says what to do: re-download and the worksheet fills in again, since the
- * readings are keyed on the session, not the definition.
+ * Resuming a draft and starting a session on a downloaded list both live on the
+ * Downloaded tab. They used to be stacked above the catalogue here, which meant
+ * three lists competing for one screen and each getting a third of it -- the
+ * height failure this screen has produced twice. What is left is one FlatList
+ * with flex: 1 and the smallest chrome that still explains itself.
  */
-function draftTitle(d: DraftSummary): string {
-  if (d.utcName === null && d.unitName === null) {
-    return 'List no longer downloaded — download it again to see this worksheet';
-  }
-  return `${d.unitName ?? 'Unknown unit'} — ${d.utcName ?? 'Unknown list'}`;
-}
-
 export default function Catalogue() {
-  const [local, setLocal] = useState<Collection[]>([]);
-  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  /**
+   * The utc urls already downloaded.
+   *
+   * Read from the `collection` table, which is SQLite on the device, so the mark
+   * survives a restart, a reinstall of the JS bundle, and being offline -- which
+   * is exactly what "stay that way in future" has to mean here. Nothing about it
+   * comes from this session's browse pass.
+   */
+  const [downloaded, setDownloaded] = useState<ReadonlySet<string>>(new Set());
   // One object, not four states: the four arrays are only ever meaningful
   // together, and four setStates would let a render land between them.
   const [browsed, setBrowsed] = useState<Browsed>(EMPTY);
   const [unitFilter, setUnitFilter] = useState(ALL);
   const [freqFilter, setFreqFilter] = useState(ALL);
+  const [search, setSearch] = useState('');
   const [msg, setMsg] = useState('');
 
+  /**
+   * Which lists are already downloaded.
+   *
+   * Caught, not left to reject: an unhandled rejection here would leave every
+   * row unmarked, which reads as "nothing has ever been downloaded" -- the exact
+   * false statement this mark exists to prevent.
+   */
+  const loadDownloaded = useCallback(async () => {
+    try {
+      const cols = await listCollections();
+      setDownloaded(new Set(cols.map((c) => c.utcUrl)));
+    } catch (e: any) {
+      setMsg(`Could not read which lists are already downloaded: ${e?.message ?? e}`);
+    }
+  }, []);
+
+  // On focus, not just on mount: a list can be downloaded from here, and the
+  // set must also be right when the user comes back from another tab.
   useFocusEffect(
     useCallback(() => {
-      // Both are caught: a rejected query with no handler is an unhandled
-      // rejection and an empty section, which reads exactly like "no drafts" --
-      // the same silence this screen exists to remove.
-      listCollections()
-        .then(setLocal)
-        .catch((e: any) => setMsg(`Could not read downloaded lists: ${e?.message ?? e}`));
-      // Refreshed on focus, not just on mount, so a draft appears the instant
-      // the user backs out of a worksheet -- which is the exact gesture that
-      // used to strand it.
-      listDrafts()
-        .then(setDrafts)
-        .catch((e: any) =>
-          setMsg(`Could not read sessions in progress: ${e?.message ?? e}`)
-        );
-    }, [])
+      loadDownloaded();
+    }, [loadDownloaded])
   );
 
   const browse = async () => {
@@ -143,6 +150,10 @@ export default function Catalogue() {
       });
       // A filter kept from a previous browse may name a unit that is no longer
       // in the list, which would read as "0 of 336" and look like breakage.
+      //
+      // The search box is deliberately NOT cleared with them: a dropdown's
+      // selection can name something that no longer exists, while the typed
+      // query is right there on screen explaining why the list is short.
       setUnitFilter(ALL);
       setFreqFilter(ALL);
       setMsg('');
@@ -152,8 +163,8 @@ export default function Catalogue() {
   };
 
   const view = useMemo(
-    () => buildCatalogue({ ...browsed, unitFilter, freqFilter }),
-    [browsed, unitFilter, freqFilter]
+    () => buildCatalogue({ ...browsed, unitFilter, freqFilter, search }),
+    [browsed, unitFilter, freqFilter, search]
   );
 
   const download = async (utc: CatalogueRow) => {
@@ -201,171 +212,161 @@ export default function Catalogue() {
       // rather than guess. The list is still downloaded and usable; it simply
       // waits for the next full refresh to gain a schedule row.
       if (scheduleRow) await upsertScheduleRow(scheduleRow, browsed.fetchedAt);
-      setLocal(await listCollections());
+      // Re-read rather than add utc.url to the set: the row is marked because
+      // the table says so, and only because of that. Awaited BEFORE the success
+      // message, since loadDownloaded writes msg on failure and would otherwise
+      // overwrite it.
+      await loadDownloaded();
       setMsg(`Saved ${tests.length} tests.`);
     } catch (e: any) {
       setMsg(e.message);
     }
   };
 
-  const startSession = async (col: Collection) => {
-    const id = Crypto.randomUUID();
-    try {
-      await createSession(id, col.utcUrl, Crypto.randomUUID(), nowStamp());
-    } catch (e: any) {
-      // Without this a failed INSERT is an unhandled rejection and the tap looks
-      // like it did nothing at all.
-      setMsg(`Could not start a session: ${e?.message ?? e}`);
-      return;
-    }
-    router.push(`/worksheet/${id}`);
-  };
-
-  /**
-   * Drafts grouped by the list they belong to.
-   *
-   * "Start session" always mints a new session, so tapping it on a list that
-   * already has an unfinished draft opens a BLANK sheet and splits the readings
-   * across two sessions -- and backing out of a worksheet, the gesture this whole
-   * section exists for, is exactly what leaves that draft behind. The offline row
-   * offers Resume when one exists so the split has to be chosen, not stumbled
-   * into.
-   */
-  const draftsByUtc = useMemo(() => {
-    const m: Record<string, DraftSummary[]> = {};
-    for (const d of drafts) (m[d.utcUrl] ??= []).push(d);
-    return m;
-  }, [drafts]);
-
   return (
     <View style={{ padding: 12, flex: 1 }}>
-      {/* Browse is the only action that belongs to this screen. Connection and
-          Queue moved to the gear in the header, where they are reachable from
-          every tab instead of only this one. */}
-      <Button title="Browse" onPress={browse} />
-      {msg ? <Text style={{ paddingVertical: 4 }}>{msg}</Text> : null}
-
-      {/* Hidden entirely when there are none, so the normal screen is unchanged.
-          The cap is a FRACTION of the screen, not a fixed 170dp: this block has
-          flexBasis auto while the two sections below have flexBasis 0, so every
-          dp it takes comes straight off them and a fixed cap would squeeze the
-          download list to nothing on a 640dp phone. flexShrink on the list lets
-          it yield inside the cap and scroll rather than clip. */}
-      {drafts.length ? (
-        <View style={{ marginTop: 8, maxHeight: '30%' }}>
-          <Text style={{ fontWeight: 'bold' }}>Sessions in progress ({drafts.length})</Text>
-          <FlatList
-            style={{ flexShrink: 1 }}
-            data={drafts}
-            keyExtractor={(d) => d.id}
-            renderItem={({ item }) => (
-              <View style={{ paddingVertical: 6 }}>
-                <Text>{draftTitle(item)}</Text>
-                <Text style={{ color: '#666', fontSize: 12 }}>
-                  Started {item.workStarted}
-                </Text>
-                {/* An outbox row on a session still marked draft means finishing
-                    it half-failed. Re-finishing would POST the same user_key,
-                    which comes back a duplicate and is recorded as sent, so any
-                    edit made now would vanish. Say so. */}
-                {item.outboxStatus ? (
-                  <Text style={{ color: '#b00020', fontSize: 12 }}>
-                    Already {item.outboxStatus} in the queue — check the Queue
-                    screen before editing; changes may not be sent.
-                  </Text>
-                ) : null}
-                <Button
-                  title="Resume"
-                  onPress={() => router.push(`/worksheet/${item.id}`)}
-                />
-              </View>
-            )}
-          />
-        </View>
-      ) : null}
-
-      <View style={{ flex: 1, marginTop: 8 }}>
-        <Text style={{ fontWeight: 'bold' }}>Available offline ({local.length})</Text>
-        <FlatList
-          style={{ flex: 1 }}
-          data={local}
-          keyExtractor={(i) => i.utcUrl}
-          ListEmptyComponent={<Text style={{ color: '#666' }}>Nothing downloaded yet.</Text>}
-          renderItem={({ item }) => {
-            const open = draftsByUtc[item.utcUrl] ?? [];
-            return (
-              <View style={{ paddingVertical: 6 }}>
-                <Text>{item.unitName} — {item.utcName}</Text>
-                {open.length ? (
-                  <>
-                    <Text style={{ color: '#666', fontSize: 12 }}>
-                      {open.length} unfinished session
-                      {open.length === 1 ? '' : 's'} — starting a new one leaves
-                      {open.length === 1 ? ' it' : ' them'} untouched.
-                    </Text>
-                    <Button
-                      title="Resume latest"
-                      onPress={() => router.push(`/worksheet/${open[0].id}`)}
-                    />
-                  </>
-                ) : null}
-                <Button title="Start session" onPress={() => startSession(item)} />
-              </View>
-            );
+      {/* One line: search, its clear control, and Browse. Everything above the
+          list is chrome the list does not get, and this screen's ancestor has
+          twice computed to near-zero list height. Connection and Queue live in
+          the gear in the header, reachable from every tab. */}
+      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search lists"
+          placeholderTextColor="#999"
+          // The phone's own capitalisation and correction would rewrite a query
+          // aimed at names like "TB1 Daily Output" into something that matches
+          // nothing, with no sign of what happened.
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel="Search lists"
+          style={{
+            flex: 1,
+            borderWidth: 1,
+            borderColor: '#888',
+            borderRadius: 4,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
           }}
         />
+        {/* An explicit control, not clearButtonMode: that prop is iOS only and
+            this app runs on Android, where it would leave no way out of a query
+            but the backspace key. Shown only when there is something to clear,
+            so it never occupies the row for nothing. */}
+        {search ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            onPress={() => setSearch('')}
+            hitSlop={8}
+            style={{ paddingHorizontal: 6, paddingVertical: 6 }}
+          >
+            <Text style={{ fontSize: 16, color: MUTED }}>✕</Text>
+          </Pressable>
+        ) : null}
+        <Button title="Browse" onPress={browse} />
       </View>
 
-      <View style={{ flex: 2, marginTop: 8 }}>
-        <Text style={{ fontWeight: 'bold', marginBottom: 6 }}>On the instance</Text>
-        {/* Side by side, not stacked: two stacked Dropdowns plus this section's
-            title, count and notice are ~200dp of unshrinkable chrome, which on a
-            640dp phone left the list below it nothing. The selected label
-            truncates instead (Dropdown already sets numberOfLines), and the modal
-            shows it in full. */}
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          <View style={{ flex: 1 }}>
-            <Dropdown
-              label="Unit"
-              options={view.unitOptions}
-              value={unitFilter}
-              onSelect={setUnitFilter}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Dropdown
-              label="Frequency"
-              options={view.freqOptions}
-              value={freqFilter}
-              onSelect={setFreqFilter}
-            />
-          </View>
+      {/* Side by side, not stacked: two stacked Dropdowns are ~130dp of
+          unshrinkable chrome, which on a 640dp phone left the list below
+          nothing. The selected label truncates instead (Dropdown already sets
+          numberOfLines), and the modal shows it in full. */}
+      <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Dropdown
+            label="Unit"
+            options={view.unitOptions}
+            value={unitFilter}
+            onSelect={setUnitFilter}
+          />
         </View>
-        {/* One line for both, and never hide a collection without saying so. */}
-        <Text style={{ color: '#666', fontSize: 12 }}>
-          {view.visible.length} of {view.rows.length}
-          {view.hiddenNotice ? ` · ${view.hiddenNotice}` : ''}
-        </Text>
-        <FlatList
-          style={{ flex: 1, marginTop: 4 }}
-          data={view.visible}
-          keyExtractor={(i) => i.url}
-          ListEmptyComponent={
-            <Text style={{ color: '#666' }}>
-              {view.rows.length ? 'No list matches these filters.' : 'Press Browse to load.'}
-            </Text>
-          }
-          renderItem={({ item }) => (
-            <View style={{ paddingVertical: 6 }}>
-              <Text style={{ color: '#666', fontSize: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Dropdown
+            label="Frequency"
+            options={view.freqOptions}
+            value={freqFilter}
+            onSelect={setFreqFilter}
+          />
+        </View>
+      </View>
+
+      {/* One line for the count and the withheld notice, and never hide a
+          collection without saying so. The count is "shown of downloadable", so
+          search and the dropdowns move the first number only. */}
+      <Text style={{ color: MUTED, fontSize: 12 }}>
+        {view.visible.length} of {view.rows.length}
+        {view.hiddenNotice ? ` · ${view.hiddenNotice}` : ''}
+      </Text>
+
+      {msg ? <Text style={{ paddingVertical: 4 }}>{msg}</Text> : null}
+
+      <FlatList
+        style={{ flex: 1, marginTop: 4 }}
+        data={view.visible}
+        keyExtractor={(i) => i.url}
+        // Dismiss the keyboard on the first drag: the box takes half the screen
+        // on a phone, and the results it filtered are what the user is reaching
+        // for.
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <Text style={{ color: MUTED }}>
+            {view.rows.length
+              ? search
+                ? `No list matches "${search.trim()}"${
+                    unitFilter !== ALL || freqFilter !== ALL ? ' with these filters' : ''
+                  }.`
+                : 'No list matches these filters.'
+              : 'Press Browse to load.'}
+          </Text>
+        }
+        renderItem={({ item }) => {
+          const already = downloaded.has(item.url);
+          return (
+            <View
+              style={{
+                paddingVertical: 8,
+                borderBottomWidth: 1,
+                borderBottomColor: '#eee',
+              }}
+            >
+              <Text style={{ color: MUTED, fontSize: 12 }}>
                 {item.unitLabel} — {item.freqLabel}
               </Text>
               <Text>{item.name}</Text>
-              <Button title="Download" onPress={() => download(item)} />
+              {already ? (
+                // A state, not a disabled button: a greyed-out "Download" reads
+                // as something the app is refusing to do, when in fact the work
+                // is already done and the list is usable offline right now.
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                  <Text style={{ color: DONE, fontWeight: 'bold' }}>✓ Downloaded</Text>
+                  {/* Kept, because a definition genuinely changes on the server
+                      -- a test added to the list is otherwise invisible on the
+                      phone forever. Plain underlined text rather than a Button,
+                      so nothing on a finished row competes with the Download
+                      buttons on the rows that still need one. */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Download ${item.name} again`}
+                    onPress={() => download(item)}
+                    hitSlop={6}
+                  >
+                    <Text
+                      style={{ color: MUTED, fontSize: 12, textDecorationLine: 'underline' }}
+                    >
+                      Download again
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Button title="Download" onPress={() => download(item)} />
+              )}
             </View>
-          )}
-        />
-      </View>
+          );
+        }}
+      />
     </View>
   );
 }
