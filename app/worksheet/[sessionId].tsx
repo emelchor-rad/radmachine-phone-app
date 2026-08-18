@@ -4,12 +4,12 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { PassFail } from '../../src/ui/PassFail';
 import { getTests } from '../../src/db/collections';
 import { loadDraft, markCompleted, setValue } from '../../src/db/sessions';
 import { enqueue } from '../../src/db/outbox';
@@ -196,9 +196,15 @@ export default function Worksheet() {
             ) : null}
             <Text>{t.name}</Text>
             {t.type === 'boolean' ? (
-              <Switch
-                value={v === true}
-                onValueChange={(b) => update(t.slug, { value: b })}
+              // null is a real, visible state here, not a fallback: it is what
+              // buildPayload sends as {skipped: true} and what the pre-submit
+              // summary lists by name. `v` is typed number|boolean|null, so a
+              // stray number on a boolean slug is treated as unrecorded rather
+              // than silently shown as Fail.
+              <PassFail
+                label={t.name}
+                value={typeof v === 'boolean' ? v : null}
+                onChange={(b) => update(t.slug, { value: b })}
               />
             ) : (
               <>
