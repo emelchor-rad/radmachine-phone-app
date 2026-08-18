@@ -54,6 +54,7 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       tol_act_high REAL,
       tol_mc_pass TEXT,
       tol_mc_tol TEXT,
+      calc_procedure TEXT,
       PRIMARY KEY (utc_url, slug)
     );
 
@@ -119,6 +120,7 @@ async function migrateTestCriteria(db: SQLite.SQLiteDatabase): Promise<void> {
     'tol_act_high REAL',
     'tol_mc_pass TEXT',
     'tol_mc_tol TEXT',
+    'calc_procedure TEXT',
   ];
   for (const def of add) {
     const name = def.split(' ')[0];

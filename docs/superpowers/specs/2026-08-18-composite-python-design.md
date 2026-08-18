@@ -123,8 +123,6 @@ Same runner; result type string (or JSON stringified if dict returned). Display 
 | Offline without bundled WASM | Bundle pyodide in `assets/` before bunker testing |
 | Procedure uses forbidden APIs | Gate + runtime try/catch |
 
-## Open question
+## Open question — resolved
 
-**Must Pyodide work in airplane mode (bunker) on first use, or is it acceptable to require one online session to download the list *and* cache the Python runtime?**
-
-Bundled assets = yes to bunker. CDN = dev only.
+**Pyodide must work in airplane mode from first use.** Runtime files live in `assets/pyodide/` (~14 MB), bundled via `assetBundlePatterns`. After clone run `npm run setup:pyodide` once before building; no CDN at runtime.

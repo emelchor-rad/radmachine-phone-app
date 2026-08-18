@@ -64,6 +64,7 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
         order: out.length,
         sublist: sublistName,
         testUrl: testUrl,
+        calculationProcedure: t.calculation_procedure ?? null,
       });
     }
 

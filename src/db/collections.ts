@@ -91,8 +91,8 @@ export async function saveCollection(c: Collection, tests: TestDef[]): Promise<v
         `INSERT INTO test (utc_url, slug, name, type, ord, sublist,
                            ref_value, ref_type, tol_type,
                            tol_act_low, tol_tol_low, tol_tol_high, tol_act_high,
-                           tol_mc_pass, tol_mc_tol)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           tol_mc_pass, tol_mc_tol, calc_procedure)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           c.utcUrl,
           t.slug,
@@ -109,6 +109,7 @@ export async function saveCollection(c: Collection, tests: TestDef[]): Promise<v
           actHigh,
           mcPass,
           mcTol,
+          t.calculationProcedure ?? null,
         ]
       );
     }
@@ -141,6 +142,7 @@ export async function getTests(utcUrl: string): Promise<TestDef[]> {
       type: r.type,
       order: r.ord,
       sublist: r.sublist,
+      ...(r.calc_procedure ? { calculationProcedure: r.calc_procedure } : {}),
       ...(criteria ? { criteria } : {}),
     };
   });

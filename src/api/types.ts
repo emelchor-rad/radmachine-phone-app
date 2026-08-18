@@ -42,6 +42,8 @@ export type TestDef = {
   order: number;          // display order across the whole flattened list
   sublist: string | null; // null for tests at the top level of the list
   criteria?: TestCriteria;
+  /** Python snippet from the API; only for composite / scomposite. */
+  calculationProcedure?: string | null;
   /** Present only while downloading; stripped before SQLite write. */
   testUrl?: string;
 };

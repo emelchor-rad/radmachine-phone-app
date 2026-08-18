@@ -29,6 +29,8 @@ import {
   EVAL_COLOUR,
   EVAL_LABEL,
 } from '../../src/qa/evaluate';
+import { recalculateComposites } from '../../src/qa/recalculate';
+import { isPyodideReady, pyodideBootError, runCompositeScript } from '../../src/qa/pyodide-bridge';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -54,6 +56,8 @@ export default function Worksheet() {
   const [msg, setMsg] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
   const [sending, setSending] = useState(false);
+  const [computed, setComputed] = useState<Record<string, number | string | null>>({});
+  const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -76,6 +80,28 @@ export default function Worksheet() {
       }
     })();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!loaded || tests.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await recalculateComposites(tests, values, runCompositeScript);
+        if (!cancelled) {
+          setComputed(result.values);
+          setCompositeBlocked(result.blocked);
+        }
+      } catch {
+        if (!cancelled) {
+          setComputed({});
+          setCompositeBlocked({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded, tests, values]);
 
   const update = async (slug: string, v: DraftValue) => {
     setValues((prev) => ({ ...prev, [slug]: v }));
@@ -200,18 +226,32 @@ export default function Worksheet() {
         </Text>
       ) : null}
       {msg ? <Text style={{ color: DANGER }}>{msg}</Text> : null}
+      {pyodideBootError() ? (
+        <Text style={{ color: DANGER, fontSize: 12 }}>
+          Python engine: {pyodideBootError()} — run npm run setup:pyodide and rebuild.
+        </Text>
+      ) : !isPyodideReady() && tests.some((t) => isCompositeType(t.type)) ? (
+        <Text style={{ color: '#555', fontSize: 12 }}>Starting Python engine…</Text>
+      ) : null}
 
       {tests.map((t) => {
         const header = t.sublist !== lastSublist ? ((lastSublist = t.sublist), t.sublist) : null;
-        const v = values[t.slug]?.value ?? null;
         const composite = isCompositeType(t.type);
+        const v = composite ? (computed[t.slug] ?? null) : (values[t.slug]?.value ?? null);
         const bad = t.type === 'simple' && isInvalidReading(texts[t.slug] ?? '');
-        const level = composite
-          ? null
-          : evaluateReading(t.type, v, t.criteria);
+        const level = evaluateReading(t.type, v, t.criteria);
         const levelColour = level ? EVAL_COLOUR[level] : null;
         const levelLabel = level ? EVAL_LABEL[level] : null;
         const refLine = criteriaLine(t.criteria);
+        const blocked = compositeBlocked[t.slug];
+        const displayValue =
+          v === null || v === undefined
+            ? null
+            : typeof v === 'boolean'
+              ? v
+                ? 'Pass'
+                : 'Fail'
+              : String(v);
         return (
           <View key={t.slug}>
             {header ? (
@@ -219,9 +259,19 @@ export default function Worksheet() {
             ) : null}
             <Text>{t.name}</Text>
             {composite ? (
-              <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
-                Calculated by RadMachine when submitted — not entered here
-              </Text>
+              blocked ? (
+                <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
+                  Calculated on submit — {blocked}
+                </Text>
+              ) : displayValue !== null ? (
+                <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
+                  Calculated on phone (indication): {displayValue}
+                </Text>
+              ) : (
+                <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
+                  Waiting for inputs…
+                </Text>
+              )
             ) : null}
             {refLine ? (
               <Text style={{ color: '#555', fontSize: 12 }}>{refLine}</Text>
