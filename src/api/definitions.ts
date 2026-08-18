@@ -1,8 +1,7 @@
 import type { TestDef, TestType } from './types';
+import { DOWNLOADABLE_TYPES } from './types';
 
 export type Fetcher = (url: string) => Promise<any>;
-
-const SUPPORTED: TestType[] = ['simple', 'boolean'];
 
 /**
  * Walk a test list and its sublists into a flat, ordered list of tests.
@@ -11,8 +10,9 @@ const SUPPORTED: TestType[] = ['simple', 'boolean'];
  * them. The payload does not express interleaving between the two, and this
  * matches how the list reads in the RadMachine UI.
  *
- * v1 supports only hand-entered tests. Anything else is a hard error rather
- * than a silently missing field on the worksheet.
+ * Hand-entered tests (`simple`, `boolean`) are fillable; composites are
+ * included for display only — RadMachine calculates them on POST. Any other
+ * type is a hard error rather than a silently missing field on the worksheet.
  */
 export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Promise<TestDef[]> {
   const out: TestDef[] = [];
@@ -39,10 +39,10 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
     for (const rawTestUrl of list.tests ?? []) {
       const testUrl: string = rawTestUrl;
       const t = await fetchCached(testUrl);
-      if (!SUPPORTED.includes(t.type)) {
+      if (!DOWNLOADABLE_TYPES.includes(t.type)) {
         throw new Error(
-          `Test '${t.slug}' is of type '${t.type}', which this app cannot fill in. ` +
-            `Supported types: ${SUPPORTED.join(', ')}.`
+          `Test '${t.slug}' is of type '${t.type}', which this app cannot download. ` +
+            `Supported types: ${DOWNLOADABLE_TYPES.join(', ')}.`
         );
       }
       // A test referenced from two sublists (or coincidentally sharing a

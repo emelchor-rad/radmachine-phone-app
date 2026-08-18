@@ -178,3 +178,14 @@ test('summarizeReadings does not mutate its inputs', () => {
   expect(values).toEqual({ dose: { value: 1 } });
   expect(texts).toEqual({ dose: '1' });
 });
+
+test('composite tests are omitted from filled, skipped and invalid', () => {
+  const mixed = [
+    { slug: 'dose', name: 'Dose 6MV', type: 'simple' as const },
+    { slug: 'avg', name: 'Average', type: 'composite' as const },
+  ];
+  const s = summarizeReadings(mixed, { dose: { value: 1 }, avg: { value: 2 } }, { dose: '1' });
+  expect(names(s.filled)).toEqual(['Dose 6MV']);
+  expect(s.skipped).toEqual([]);
+  expect(s.invalid).toEqual([]);
+});

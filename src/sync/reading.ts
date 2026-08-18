@@ -21,8 +21,11 @@ export function isInvalidReading(text: string): boolean {
   return text.trim() !== '' && parseReading(text) === null;
 }
 
+import type { TestType } from '../api/types';
+import { isFillableType, isCompositeType } from '../api/types';
+
 /** The minimum a test definition has to carry to be reported to the user. */
-export type NamedTest = { slug: string; name: string };
+export type NamedTest = { slug: string; name: string; type?: TestType };
 
 /** What is stored per slug: only the value matters for filled-vs-skipped. */
 export type ValueLike = { value: number | boolean | null | undefined };
@@ -62,6 +65,7 @@ export function summarizeReadings<T extends NamedTest>(
   const summary: ReadingSummary<T> = { filled: [], skipped: [], invalid: [] };
 
   for (const def of defs) {
+    if (def.type !== undefined && !isFillableType(def.type)) continue;
     if (isInvalidReading(texts[def.slug] ?? '')) {
       summary.invalid.push(def);
       continue;

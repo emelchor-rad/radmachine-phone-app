@@ -1,4 +1,5 @@
 import type { Draft, SubmitPayload, SubmittedTest, TestDef } from '../api/types';
+import { isFillableType } from '../api/types';
 
 /**
  * Build the exact JSON RadMachine expects for a new session.
@@ -11,6 +12,7 @@ export function buildPayload(defs: TestDef[], draft: Draft): SubmitPayload {
   const tests: Record<string, SubmittedTest> = {};
 
   for (const def of defs) {
+    if (!isFillableType(def.type)) continue;
     const entry = draft.values[def.slug];
     if (!entry || entry.value === null || entry.value === undefined) {
       tests[def.slug] = { skipped: true };

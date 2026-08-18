@@ -22,6 +22,7 @@ import {
   type ReadingSummary,
 } from '../../src/sync/reading';
 import type { TestDef, DraftValue, Draft } from '../../src/api/types';
+import { isFillableType, isCompositeType } from '../../src/api/types';
 import {
   criteriaLine,
   evaluateReading,
@@ -98,6 +99,7 @@ export default function Worksheet() {
 
   // Live, per-render view of what would be submitted. Cheap: the target list is
   // 16 tests.
+  const fillable = tests.filter((t) => isFillableType(t.type));
   const live = summarizeReadings(tests, values, texts);
 
   /**
@@ -113,10 +115,11 @@ export default function Worksheet() {
     try {
       const draft = await loadDraft(sessionId);
       const defs = await getTests(draft.utcUrl);
-      if (defs.length === 0) {
+      const fillableDefs = defs.filter((t) => isFillableType(t.type));
+      if (fillableDefs.length === 0) {
         setMsg(
-          'No test definitions are stored for this list, so nothing can be recorded. ' +
-            'Re-download the list while online before running this session.'
+          'No hand-entered tests are stored for this list, so nothing can be recorded. ' +
+            'This list may contain only calculated tests.'
         );
         return;
       }
@@ -166,7 +169,7 @@ export default function Worksheet() {
     }
   };
 
-  const canFinish = loaded && tests.length > 0 && live.invalid.length === 0;
+  const canFinish = loaded && fillable.length > 0 && live.invalid.length === 0;
 
   let lastSublist: string | null | undefined;
 
@@ -178,6 +181,12 @@ export default function Worksheet() {
         disabled={!canFinish}
       />
       {!loaded && !msg ? <Text>Loading worksheet...</Text> : null}
+      {loaded && fillable.length === 0 && tests.length > 0 ? (
+        <Text style={{ color: DANGER }}>
+          This list has no hand-entered tests — only calculated ones. Nothing can be recorded
+          here.
+        </Text>
+      ) : null}
       {loaded && tests.length === 0 ? (
         <Text style={{ color: DANGER }}>
           This list has no stored tests. Re-download it while online.
@@ -194,10 +203,11 @@ export default function Worksheet() {
       {tests.map((t) => {
         const header = t.sublist !== lastSublist ? ((lastSublist = t.sublist), t.sublist) : null;
         const v = values[t.slug]?.value ?? null;
-        const bad = isInvalidReading(texts[t.slug] ?? '');
-        const level = evaluateReading(t.type, v, t.criteria);
-        const levelColour = EVAL_COLOUR[level];
-        const levelLabel = EVAL_LABEL[level];
+        const composite = isCompositeType(t.type);
+        const bad = !composite && isInvalidReading(texts[t.slug] ?? '');
+        const level = composite ? null : evaluateReading(t.type, v, t.criteria);
+        const levelColour = level ? EVAL_COLOUR[level] : null;
+        const levelLabel = level ? EVAL_LABEL[level] : null;
         const refLine = criteriaLine(t.criteria);
         return (
           <View key={t.slug}>
@@ -205,6 +215,11 @@ export default function Worksheet() {
               <Text style={{ fontWeight: 'bold', marginTop: 12 }}>{header}</Text>
             ) : null}
             <Text>{t.name}</Text>
+            {composite ? (
+              <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
+                Calculated by RadMachine when submitted — not entered here
+              </Text>
+            ) : null}
             {refLine ? (
               <Text style={{ color: '#555', fontSize: 12 }}>{refLine}</Text>
             ) : null}
@@ -213,7 +228,7 @@ export default function Worksheet() {
                 {levelLabel}
               </Text>
             ) : null}
-            {t.type === 'boolean' ? (
+            {composite ? null : t.type === 'boolean' ? (
               // null is a real, visible state here, not a fallback: it is what
               // buildPayload sends as {skipped: true} and what the pre-submit
               // summary lists by name. `v` is typed number|boolean|null, so a
