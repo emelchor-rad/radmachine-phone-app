@@ -174,6 +174,8 @@ export default function Downloaded() {
     ];
   }, [lib.rows]);
 
+  const now = new Date();
+
   const freqOptions: Option[] = useMemo(() => {
     const seen = new Set<string>();
     let anyAdHoc = false;
@@ -212,7 +214,7 @@ export default function Downloaded() {
         a.unitName.localeCompare(b.unitName) ||
         (lib.names[a.utcUrl] ?? a.utcUrl).localeCompare(lib.names[b.utcUrl] ?? b.utcUrl)
     );
-  }, [lib.rows, lib.names, unitFilter, freqFilter]);
+  }, [lib.rows, lib.names, unitFilter, freqFilter, now]);
 
   const dueCount = useMemo(
     () =>
@@ -220,7 +222,7 @@ export default function Downloaded() {
         const s = dueState(r.dueDate, now);
         return s === 'due' || s === 'overdue';
       }).length,
-    [visible]
+    [visible, now]
   );
 
   const filtered = unitFilter !== ALL || freqFilter !== ALL;
@@ -253,8 +255,6 @@ export default function Downloaded() {
     }
     router.push(`/worksheet/${id}`);
   };
-
-  const now = new Date();
 
   return (
     <View style={{ padding: 12, flex: 1 }}>

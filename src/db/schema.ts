@@ -94,7 +94,12 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       refreshed_at   TEXT NOT NULL
     );
   `);
-  await migrateTestCriteria(db);
+  try {
+    await migrateTestCriteria(db);
+  } catch {
+    // A failed migration must not brick the app on startup. Worst case the
+    // criteria columns stay missing and tolerance feedback reads as no_tol.
+  }
   return db;
 }
 
