@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
 import { WebView } from 'react-native-webview';
 import { PYODIDE_RUNNER_HTML } from '../qa/pyodide-html';
 import {
@@ -9,14 +10,35 @@ import {
   unregisterPyodideInjector,
 } from '../qa/pyodide-bridge';
 
-/** Force Metro to bundle every Pyodide asset in assets/pyodide/. */
-const PYODIDE_BUNDLE = [
-  require('../../assets/pyodide/pyodide.js'),
-  require('../../assets/pyodide/pyodide.asm.js'),
-  require('../../assets/pyodide/pyodide.asm.wasm'),
-  require('../../assets/pyodide/python_stdlib.zip'),
-  require('../../assets/pyodide/pyodide-lock.json'),
+/**
+ * Metro-safe asset copies. Never require pyodide.js here — Metro would try to
+ * transform it and fail on dynamic import().
+ */
+const PYODIDE_FILES: { module: number; name: string }[] = [
+  { module: require('../../assets/pyodide/pyodide.runtime.bin'), name: 'pyodide.js' },
+  { module: require('../../assets/pyodide/pyodide.asm.bin'), name: 'pyodide.asm.js' },
+  { module: require('../../assets/pyodide/pyodide.asm.wasm'), name: 'pyodide.asm.wasm' },
+  { module: require('../../assets/pyodide/python_stdlib.zip'), name: 'python_stdlib.zip' },
+  { module: require('../../assets/pyodide/pyodide-lock.bin'), name: 'pyodide-lock.json' },
 ];
+
+async function preparePyodideDir(): Promise<string> {
+  const dir = `${FileSystem.cacheDirectory}pyodide/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+
+  for (const f of PYODIDE_FILES) {
+    const asset = Asset.fromModule(f.module);
+    await asset.downloadAsync();
+    if (!asset.localUri) throw new Error(`Missing asset ${f.name}`);
+    const dest = `${dir}${f.name}`;
+    const info = await FileSystem.getInfoAsync(dest);
+    if (!info.exists) {
+      await FileSystem.copyAsync({ from: asset.localUri, to: dest });
+    }
+  }
+
+  return dir;
+}
 
 /**
  * Hidden WebView that boots Pyodide from app-bundled assets — no CDN, works in
@@ -30,11 +52,8 @@ export function PyodideEngine() {
     let cancelled = false;
     (async () => {
       try {
-        // Resolve one file; Expo places the whole pyodide/ folder beside it.
-        const asset = Asset.fromModule(PYODIDE_BUNDLE[0]);
-        await asset.downloadAsync();
-        if (cancelled || !asset.localUri) return;
-        const dir = asset.localUri.replace(/pyodide\.js$/, '');
+        const dir = await preparePyodideDir();
+        if (cancelled) return;
         const base = Platform.OS === 'android' ? `file://${dir}` : dir;
         setBaseUrl(base);
       } catch (e) {

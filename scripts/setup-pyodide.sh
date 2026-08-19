@@ -22,4 +22,10 @@ for f in "${files[@]}"; do
   curl -fsSL "$BASE/$f" -o "$DIR/$f"
 done
 
+# Metro must not parse pyodide.js / pyodide.asm.js as app JS (dynamic import()).
+# Ship them as .bin assets; the app copies them to pyodide.js at runtime.
+cp "$DIR/pyodide.js" "$DIR/pyodide.runtime.bin"
+cp "$DIR/pyodide.asm.js" "$DIR/pyodide.asm.bin"
+cp "$DIR/pyodide-lock.json" "$DIR/pyodide-lock.bin"
+
 echo "Pyodide $VERSION ready in assets/pyodide/ ($(du -sh "$DIR" | cut -f1))"
