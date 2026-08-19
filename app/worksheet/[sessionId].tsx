@@ -254,6 +254,9 @@ export default function Worksheet() {
               blocked ? (
                 <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
                   Calculated on submit — {blocked}
+                  {blocked === 'No calculation procedure'
+                    ? '. Use Browse → Download again to fetch the script.'
+                    : ''}
                 </Text>
               ) : displayValue !== null ? (
                 <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>

@@ -1,5 +1,6 @@
 import type { TestDef, TestType } from './types';
 import { DOWNLOADABLE_TYPES } from './types';
+import { extractCalculationProcedure, testResourceUrl } from './procedures';
 
 export type Fetcher = (url: string) => Promise<any>;
 
@@ -36,8 +37,8 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
   // by the caller for its name, and re-fetching it here would double every
   // round trip on a phone connection.
   const walk = async (list: any, sublistName: string | null): Promise<void> => {
-    for (const rawTestUrl of list.tests ?? []) {
-      const testUrl: string = rawTestUrl;
+    for (const rawTestRef of list.tests ?? []) {
+      const testUrl = testResourceUrl(rawTestRef);
       const t = await fetchCached(testUrl);
       if (!DOWNLOADABLE_TYPES.includes(t.type)) {
         throw new Error(
@@ -64,7 +65,7 @@ export async function flattenTestList(listUrl: string, fetchJson: Fetcher): Prom
         order: out.length,
         sublist: sublistName,
         testUrl: testUrl,
-        calculationProcedure: t.calculation_procedure ?? null,
+        calculationProcedure: extractCalculationProcedure(t),
       });
     }
 

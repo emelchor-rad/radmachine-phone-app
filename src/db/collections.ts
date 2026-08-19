@@ -142,7 +142,9 @@ export async function getTests(utcUrl: string): Promise<TestDef[]> {
       type: r.type,
       order: r.ord,
       sublist: r.sublist,
-      ...(r.calc_procedure ? { calculationProcedure: r.calc_procedure } : {}),
+      ...(r.calc_procedure != null && r.calc_procedure !== ''
+        ? { calculationProcedure: r.calc_procedure }
+        : {}),
       ...(criteria ? { criteria } : {}),
     };
   });

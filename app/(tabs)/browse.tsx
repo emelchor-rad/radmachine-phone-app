@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Button, FlatList, Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { attachCriteria } from '../../src/api/criteria';
+import { attachCalculationProcedures } from '../../src/api/procedures';
 import { RadClient } from '../../src/api/client';
 import { flattenTestList } from '../../src/api/definitions';
 import {
@@ -123,6 +124,7 @@ export default function Catalogue() {
     try {
       const listUrl = definitionUrl(utc, creds.baseUrl);
       let tests = await flattenTestList(listUrl, (u) => c.get<any>(u));
+      tests = await attachCalculationProcedures(c, tests);
       const unitUrl = resolveUnitUrl(utc.unit, browsed.units);
       if (unitUrl) {
         try {
