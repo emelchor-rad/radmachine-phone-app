@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -7,7 +7,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { PassFail } from '../../src/ui/PassFail';
 import { ReadOnlyField } from '../../src/ui/ReadOnlyField';
 import { TestDetailsModal } from '../../src/ui/TestDetailsModal';
@@ -29,11 +29,11 @@ import {
   evaluateReading,
   EVAL_COLOUR,
   EVAL_LABEL,
-  type EvalLevel,
 } from '../../src/qa/evaluate';
-import { recalculateComposites } from '../../src/qa/recalculate';
 import { effectiveDraftValues } from '../../src/qa/effective-values';
+import { recalculateComposites } from '../../src/qa/recalculate';
 import { runCompositeScript } from '../../src/qa/python-engine';
+import { isOutOfTolerance, listHasToleranceWarning } from '../../src/qa/tolerance-warning';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -46,8 +46,14 @@ const DANGER = '#b00020';
 const PRIMARY = '#1565c0';
 const DEFAULT_WARNING = 'Do not treat';
 
-function isOutOfTolerance(level: EvalLevel): boolean {
-  return level === 'tolerance' || level === 'action';
+function WorksheetTitle({ unitName, listName }: { unitName: string; listName: string }) {
+  return (
+    <View style={{ marginBottom: 4 }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', lineHeight: 24 }}>
+        Perform {unitName} :: {listName}
+      </Text>
+    </View>
+  );
 }
 
 function WarningBanner({ message }: { message: string }) {
@@ -76,7 +82,6 @@ function StatusBadge({ label, colour }: { label: string; colour: string }) {
 }
 
 export default function Worksheet() {
-  const navigation = useNavigation();
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const [collection, setCollection] = useState<Collection | null>(null);
   const [tests, setTests] = useState<TestDef[]>([]);
@@ -90,13 +95,6 @@ export default function Worksheet() {
   const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
   const [compositeWaiting, setCompositeWaiting] = useState<Record<string, string[]>>({});
   const [detailTest, setDetailTest] = useState<TestDef | null>(null);
-
-  useLayoutEffect(() => {
-    if (!collection) return;
-    navigation.setOptions({
-      title: `Perform ${collection.unitName} :: ${collection.utcName}`,
-    });
-  }, [navigation, collection]);
 
   useEffect(() => {
     (async () => {
@@ -213,26 +211,34 @@ export default function Worksheet() {
   const allFilled =
     canFinish && live.skipped.length === 0 && live.filled.length === fillable.length;
 
-  const showToleranceWarning = tests.some((t) => {
-    const composite = isCompositeType(t.type);
-    const v = composite ? (computed[t.slug] ?? null) : (values[t.slug]?.value ?? null);
-    return isOutOfTolerance(evaluateReading(t.type, v, t.criteria));
-  });
+  const showToleranceWarning = listHasToleranceWarning(tests, values, computed);
 
   const bannerText = collection?.warningMessage?.trim() || DEFAULT_WARNING;
+  const bannerHeight = 44;
 
   let lastSublist: string | null | undefined;
 
   return (
-    <View
-      style={{
-        flex: 1,
-        borderWidth: showToleranceWarning ? 4 : 0,
-        borderColor: DANGER,
-      }}
-    >
-      {showToleranceWarning ? <WarningBanner message={bannerText} /> : null}
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}>
+    <View style={{ flex: 1, backgroundColor: 'white' }}>
+      <View
+        style={{
+          flex: 1,
+          borderWidth: showToleranceWarning ? 4 : 0,
+          borderColor: DANGER,
+        }}
+      >
+        {showToleranceWarning ? <WarningBanner message={bannerText} /> : null}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            padding: 16,
+            gap: 10,
+            paddingBottom: showToleranceWarning ? bannerHeight + 16 : 16,
+          }}
+        >
+          {collection ? (
+            <WorksheetTitle unitName={collection.unitName} listName={collection.utcName} />
+          ) : null}
         <Pressable
           onPress={canFinish ? openSummary : undefined}
           disabled={!canFinish}
@@ -446,8 +452,20 @@ export default function Worksheet() {
             </Pressable>
           </Pressable>
         </Modal>
-      </ScrollView>
-      {showToleranceWarning ? <WarningBanner message={bannerText} /> : null}
+        </ScrollView>
+        {showToleranceWarning ? (
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          >
+            <WarningBanner message={bannerText} />
+          </View>
+        ) : null}
+      </View>
       <TestDetailsModal test={detailTest} onClose={() => setDetailTest(null)} />
     </View>
   );
