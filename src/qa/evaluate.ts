@@ -139,3 +139,105 @@ export function criteriaLine(criteria: TestCriteria | null | undefined): string 
   const fmt = (n: number | null) => (n === null ? '—' : String(n));
   return `Ref ${ref}, tol ${fmt(criteria.tolLow)}/${fmt(criteria.tolHigh)}, act ${fmt(criteria.actLow)}/${fmt(criteria.actHigh)}`;
 }
+
+export type CriteriaBandValues = {
+  actLow: number | null;
+  tolLow: number | null;
+  ref: number;
+  tolHigh: number | null;
+  actHigh: number | null;
+};
+
+export type CriteriaDisplay =
+  | { kind: 'none' }
+  | { kind: 'boolean'; refLabel: 'Pass' | 'Fail' }
+  | { kind: 'multchoice'; pass: string[]; tol: string[] }
+  | { kind: 'ref_only'; ref: number }
+  | { kind: 'absolute'; bands: CriteriaBandValues }
+  | {
+      kind: 'percent';
+      ref: number;
+      actLow: number | null;
+      tolLow: number | null;
+      tolHigh: number | null;
+      actHigh: number | null;
+    };
+
+function fmtBand(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+function bandFromDiffs(ref: number, criteria: TestCriteria): CriteriaBandValues {
+  const add = (d: number | null) => (d === null ? null : ref + d);
+  return {
+    actLow: add(criteria.actLow),
+    tolLow: add(criteria.tolLow),
+    ref,
+    tolHigh: add(criteria.tolHigh),
+    actHigh: add(criteria.actHigh),
+  };
+}
+
+/** Structured ref/tol data for UI, with absolute limits like the RadMachine web UI. */
+export function criteriaDisplay(
+  criteria: TestCriteria | null | undefined
+): CriteriaDisplay {
+  if (!criteria) return { kind: 'none' };
+
+  if (criteria.tolType === 'multchoice') {
+    return {
+      kind: 'multchoice',
+      pass: criteria.mcPassChoices ?? [],
+      tol: criteria.mcTolChoices ?? [],
+    };
+  }
+
+  if (criteria.refValue === null) return { kind: 'none' };
+
+  if (criteria.refType === 'boolean') {
+    return { kind: 'boolean', refLabel: criteria.refValue >= 0.5 ? 'Pass' : 'Fail' };
+  }
+
+  const ref = criteria.refValue;
+  if (criteria.tolType === null) return { kind: 'ref_only', ref };
+
+  if (criteria.tolType === 'absolute') {
+    return { kind: 'absolute', bands: bandFromDiffs(ref, criteria) };
+  }
+
+  return {
+    kind: 'percent',
+    ref,
+    actLow: criteria.actLow,
+    tolLow: criteria.tolLow,
+    tolHigh: criteria.tolHigh,
+    actHigh: criteria.actHigh,
+  };
+}
+
+/** Compact summary line for the worksheet row. */
+export function criteriaSummary(criteria: TestCriteria | null | undefined): string | null {
+  const d = criteriaDisplay(criteria);
+  if (d.kind === 'none') return null;
+  if (d.kind === 'boolean') return `Reference: ${d.refLabel}`;
+  if (d.kind === 'multchoice') {
+    const parts: string[] = [];
+    if (d.pass.length) parts.push(`Pass: ${d.pass.join(', ')}`);
+    if (d.tol.length) parts.push(`Tolerance: ${d.tol.join(', ')}`);
+    return parts.length ? parts.join(' · ') : null;
+  }
+  if (d.kind === 'ref_only') return `Reference: ${fmtBand(d.ref)}`;
+  if (d.kind === 'absolute') {
+    const { actLow, tolLow, ref, tolHigh, actHigh } = d.bands;
+    const parts = [`Reference: ${fmtBand(ref)}`];
+    if (tolLow !== null && tolHigh !== null) {
+      parts.push(`Tolerance: ${fmtBand(tolLow)} – ${fmtBand(tolHigh)}`);
+    }
+    if (actLow !== null && actHigh !== null) {
+      parts.push(`Action: ${fmtBand(actLow)} – ${fmtBand(actHigh)}`);
+    }
+    return parts.join(' · ');
+  }
+  const pct = (n: number | null) => (n === null ? '—' : `${n}%`);
+  return `Reference: ${fmtBand(d.ref)} · Tolerance: ${pct(d.tolLow)}/${pct(d.tolHigh)} · Action: ${pct(d.actLow)}/${pct(d.actHigh)}`;
+}

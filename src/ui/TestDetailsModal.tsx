@@ -1,7 +1,7 @@
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import type { TestDef } from '../api/types';
 import { isCompositeType } from '../api/types';
-import { criteriaLine } from '../qa/evaluate';
+import { CriteriaDisplay } from './CriteriaDisplay';
 
 export function TestDetailsModal({
   test,
@@ -10,7 +10,6 @@ export function TestDetailsModal({
   test: TestDef | null;
   onClose: () => void;
 }) {
-  const refLine = test ? criteriaLine(test.criteria) : null;
   return (
     <Modal visible={test !== null} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable
@@ -24,13 +23,14 @@ export function TestDetailsModal({
       >
         <Pressable
           onPress={() => {}}
-          style={{ backgroundColor: 'white', borderRadius: 6, padding: 16, gap: 10, maxHeight: '80%' }}
+          style={{ backgroundColor: 'white', borderRadius: 6, padding: 16, gap: 12, maxHeight: '85%' }}
         >
           <Text style={{ fontWeight: 'bold', fontSize: 18 }}>{test?.name}</Text>
-          <ScrollView style={{ maxHeight: 360 }}>
-            <Text style={{ color: '#555' }}>Type: {test?.type}</Text>
-            <Text style={{ color: '#555' }}>Identifier: {test?.slug}</Text>
-            {refLine ? <Text style={{ marginTop: 8 }}>{refLine}</Text> : null}
+          <Text style={{ color: '#555' }}>
+            {test?.type} · {test?.slug}
+          </Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            <CriteriaDisplay criteria={test?.criteria} />
             {test && isCompositeType(test.type) && test.calculationProcedure ? (
               <View style={{ marginTop: 12, gap: 4 }}>
                 <Text style={{ fontWeight: 'bold' }}>Calculation</Text>

@@ -2,6 +2,8 @@ import { criteriaFromUti } from '../src/api/criteria';
 import type { TestCriteria } from '../src/api/types';
 import {
   criteriaLine,
+  criteriaDisplay,
+  criteriaSummary,
   evaluateReading,
   type EvalLevel,
 } from '../src/qa/evaluate';
@@ -156,6 +158,37 @@ test('criteriaLine describes multchoice pass and tolerance lists', () => {
       mcTolChoices: ['B'],
     })
   ).toBe('Pass: A · Tol: B');
+});
+
+test('criteriaDisplay converts absolute diffs to band values like the web UI', () => {
+  expect(
+    criteriaDisplay({
+      refValue: 50,
+      refType: 'numerical',
+      tolType: 'absolute',
+      actLow: -5,
+      tolLow: -2,
+      tolHigh: 2,
+      actHigh: 5,
+    })
+  ).toEqual({
+    kind: 'absolute',
+    bands: { actLow: 45, tolLow: 48, ref: 50, tolHigh: 52, actHigh: 55 },
+  });
+});
+
+test('criteriaSummary reads like RadMachine evaluation line', () => {
+  expect(
+    criteriaSummary({
+      refValue: 50,
+      refType: 'numerical',
+      tolType: 'absolute',
+      actLow: -5,
+      tolLow: -2,
+      tolHigh: 2,
+      actHigh: 5,
+    })
+  ).toBe('Reference: 50 · Tolerance: 48 – 52 · Action: 45 – 55');
 });
 
 const levels: EvalLevel[] = ['ok', 'tolerance', 'action', 'no_tol', 'unrecorded'];

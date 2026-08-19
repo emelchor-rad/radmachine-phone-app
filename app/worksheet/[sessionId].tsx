@@ -10,6 +10,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { PassFail } from '../../src/ui/PassFail';
 import { ReadOnlyField } from '../../src/ui/ReadOnlyField';
+import { CriteriaDisplay } from '../../src/ui/CriteriaDisplay';
 import { TestDetailsModal } from '../../src/ui/TestDetailsModal';
 import { getCollection, getTests, type Collection } from '../../src/db/collections';
 import { loadDraft, markCompleted, setValue } from '../../src/db/sessions';
@@ -25,7 +26,6 @@ import {
 import type { TestDef, DraftValue, Draft } from '../../src/api/types';
 import { isFillableType, isCompositeType } from '../../src/api/types';
 import {
-  criteriaLine,
   evaluateReading,
   EVAL_COLOUR,
   EVAL_LABEL,
@@ -281,7 +281,6 @@ export default function Worksheet() {
           const level = evaluateReading(t.type, v, t.criteria);
           const levelColour = level ? EVAL_COLOUR[level] : null;
           const levelLabel = level ? EVAL_LABEL[level] : null;
-          const refLine = criteriaLine(t.criteria);
           const blocked = compositeBlocked[t.slug];
           const waitingFor = compositeWaiting[t.slug] ?? [];
           const waitingNames = waitingFor.map(
@@ -307,7 +306,7 @@ export default function Worksheet() {
                   {t.name}
                 </Text>
               </Pressable>
-              {refLine ? <Text style={{ color: '#555', fontSize: 12 }}>{refLine}</Text> : null}
+              <CriteriaDisplay criteria={t.criteria} compact />
               {levelLabel && levelColour && isOutOfTolerance(level) ? (
                 <StatusBadge label={levelLabel} colour={levelColour} />
               ) : null}
