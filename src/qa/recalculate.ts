@@ -14,6 +14,8 @@ export type CompositeResult = {
   values: Record<string, number | string | null>;
   /** Slug → why the phone did not calculate (gated out or runtime error). */
   blocked: Record<string, string>;
+  /** Slug → fillable slugs still needed before the phone can calculate. */
+  waiting: Record<string, string[]>;
 };
 
 const MAX_PASSES = 3;
@@ -29,6 +31,7 @@ export async function recalculateComposites(
   const composites = tests.filter((t) => isCompositeType(t.type));
   const values: Record<string, number | string | null> = {};
   const blocked: Record<string, string> = {};
+  const waiting: Record<string, string[]> = {};
 
   for (const t of composites) {
     const gate = canRunOnDevice(t.calculationProcedure);
@@ -44,9 +47,11 @@ export async function recalculateComposites(
       const ctx = buildCalcContext(tests, draftValues, values);
       const missing = missingProcedureInputs(procedure, tests, draftValues, values, t.slug);
       if (missing.length > 0) {
+        waiting[t.slug] = missing;
         delete blocked[t.slug];
         continue;
       }
+      delete waiting[t.slug];
       try {
         const next = await run(t.slug, procedure, ctx);
         if (values[t.slug] !== next) {
@@ -66,5 +71,5 @@ export async function recalculateComposites(
     if (!changed) break;
   }
 
-  return { values, blocked };
+  return { values, blocked, waiting };
 }

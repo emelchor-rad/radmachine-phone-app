@@ -91,7 +91,7 @@ export async function runCompositeScript(
   configureSkulpt(Sk);
   const script = buildPythonScript(slug, procedure, context);
 
-  Sk.globals = Sk.globals ?? {};
+  Sk.globals = {};
   Sk.importMainWithBody('<stdin>', false, script, true);
   return skulptValue(Sk.globals.__radmachine_result__);
 }

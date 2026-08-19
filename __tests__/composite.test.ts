@@ -63,6 +63,7 @@ test('recalculateComposites runs in list order with a mock runner', async () => 
   const out = await recalculateComposites(tests, { a: { value: 4 } }, run);
   expect(out.values.sum_ab).toBe(5);
   expect(out.blocked).toEqual({});
+  expect(out.waiting).toEqual({});
 });
 
 test('recalculateComposites marks gated procedures as blocked', async () => {
@@ -79,6 +80,7 @@ test('recalculateComposites marks gated procedures as blocked', async () => {
   const out = await recalculateComposites(tests, {}, async () => 1);
   expect(out.values).toEqual({});
   expect(out.blocked.dose).toMatch(/pylinac/);
+  expect(out.waiting).toEqual({});
 });
 
 test('recalculateComposites waits for missing inputs instead of blocking', async () => {
@@ -99,6 +101,7 @@ test('recalculateComposites waits for missing inputs instead of blocking', async
   expect(run).not.toHaveBeenCalled();
   expect(out.values).toEqual({});
   expect(out.blocked).toEqual({});
+  expect(out.waiting.avg).toEqual(['b']);
 
   const filled = await recalculateComposites(
     tests,

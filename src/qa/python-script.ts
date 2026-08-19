@@ -35,6 +35,12 @@ function pyTols(tols: CalcContext['TOLS']): string {
   return `{${parts.join(', ')}}`;
 }
 
+/** QATrack allows assigning to `result` instead of the test macro name. */
+export function resultCaptureIdent(slug: string, procedure: string): string {
+  if (/\bresult\s*=/.test(procedure)) return 'result';
+  return pyIdent(slug);
+}
+
 /**
  * Wrap a QATrack calculation_procedure with slug bindings and capture the result.
  *
@@ -45,7 +51,7 @@ export function buildPythonScript(
   procedure: string,
   context: CalcContext
 ): string {
-  const ident = pyIdent(slug);
+  const capture = resultCaptureIdent(slug, procedure);
   const bindings = Object.entries(context.values)
     .map(([s, v]) => `${pyIdent(s)} = ${pyLiteral(v)}`)
     .join('\n');
@@ -56,6 +62,6 @@ REFS = ${pyRefs(context.REFS)}
 TOLS = ${pyTols(context.TOLS)}
 ${bindings}
 ${procedure}
-__radmachine_result__ = ${ident}
+__radmachine_result__ = ${capture}
 `.trim();
 }

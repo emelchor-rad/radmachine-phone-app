@@ -30,6 +30,7 @@ import {
   EVAL_LABEL,
 } from '../../src/qa/evaluate';
 import { recalculateComposites } from '../../src/qa/recalculate';
+import { effectiveDraftValues } from '../../src/qa/effective-values';
 import { runCompositeScript } from '../../src/qa/python-engine';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
@@ -58,6 +59,7 @@ export default function Worksheet() {
   const [sending, setSending] = useState(false);
   const [computed, setComputed] = useState<Record<string, number | string | null>>({});
   const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
+  const [compositeWaiting, setCompositeWaiting] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     (async () => {
@@ -86,22 +88,25 @@ export default function Worksheet() {
     let cancelled = false;
     (async () => {
       try {
-        const result = await recalculateComposites(tests, values, runCompositeScript);
+        const draft = effectiveDraftValues(tests, values, texts);
+        const result = await recalculateComposites(tests, draft, runCompositeScript);
         if (!cancelled) {
           setComputed(result.values);
           setCompositeBlocked(result.blocked);
+          setCompositeWaiting(result.waiting);
         }
       } catch {
         if (!cancelled) {
           setComputed({});
           setCompositeBlocked({});
+          setCompositeWaiting({});
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [loaded, tests, values]);
+  }, [loaded, tests, values, texts]);
 
   const update = async (slug: string, v: DraftValue) => {
     setValues((prev) => ({ ...prev, [slug]: v }));
@@ -236,6 +241,10 @@ export default function Worksheet() {
         const levelLabel = level ? EVAL_LABEL[level] : null;
         const refLine = criteriaLine(t.criteria);
         const blocked = compositeBlocked[t.slug];
+        const waitingFor = compositeWaiting[t.slug] ?? [];
+        const waitingNames = waitingFor.map(
+          (slug) => tests.find((x) => x.slug === slug)?.name ?? slug
+        );
         const displayValue =
           v === null || v === undefined
             ? null
@@ -264,7 +273,9 @@ export default function Worksheet() {
                 </Text>
               ) : (
                 <Text style={{ color: '#555', fontSize: 12, fontStyle: 'italic' }}>
-                  Waiting for inputs…
+                  {waitingNames.length > 0
+                    ? `Waiting for: ${waitingNames.join(', ')}`
+                    : 'Waiting for inputs…'}
                 </Text>
               )
             ) : null}
