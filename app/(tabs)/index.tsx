@@ -6,6 +6,7 @@ import { lastRefreshedAt, listSchedule } from '../../src/db/schedule';
 import { allRows } from '../../src/db/outbox';
 import { ALL, buildUnitCards, type ScheduleRow } from '../../src/schedule/summary';
 import { refreshSchedule } from '../../src/sync/refresh';
+import { BUILD_LABEL } from '../../src/build-info';
 
 const DANGER = '#b00020';
 const WARN = '#8a6d00';
@@ -181,6 +182,10 @@ export default function Dashboard() {
           </View>
         </View>
       ))}
+
+      <Text style={{ color: '#bbb', fontSize: 11, textAlign: 'center', marginTop: 24 }}>
+        Build {BUILD_LABEL}
+      </Text>
     </ScrollView>
   );
 }
