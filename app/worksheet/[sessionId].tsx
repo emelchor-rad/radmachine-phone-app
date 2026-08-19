@@ -36,6 +36,7 @@ import { runCompositeScript } from '../../src/qa/python-engine';
 import { isOutOfTolerance, listHasToleranceWarning } from '../../src/qa/tolerance-warning';
 import { loadCredentials, resolveInstanceName } from '../../src/secure/credentials';
 import { InstanceBar } from '../../src/ui/InstanceBar';
+import { RADMACHINE_BLUE, RAD_DANGER } from '../../src/ui/theme';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -44,13 +45,14 @@ type Pending = {
   summary: ReadingSummary<TestDef>;
 };
 
-const DANGER = '#b00020';
-const PRIMARY = '#1565c0';
+const DANGER = RAD_DANGER;
+const PRIMARY = RADMACHINE_BLUE;
 const DEFAULT_WARNING = 'Do not treat';
+const WARNING_BAR_HEIGHT = 52;
 
 function WorksheetTitle({ unitName, listName }: { unitName: string; listName: string }) {
   return (
-    <View style={{ marginBottom: 4 }}>
+    <View style={{ marginBottom: 8, marginTop: 4 }}>
       <Text style={{ fontSize: 17, fontWeight: 'bold', lineHeight: 24 }}>
         Perform {unitName} :: {listName}
       </Text>
@@ -216,12 +218,12 @@ export default function Worksheet() {
   const showToleranceWarning = listHasToleranceWarning(tests, values, computed);
 
   const bannerText = collection?.warningMessage?.trim() || DEFAULT_WARNING;
-  const bannerHeight = 44;
 
   let lastSublist: string | null | undefined;
 
   return (
     <View style={{ flex: 1, backgroundColor: 'white' }}>
+      <InstanceBar label={instanceName} safeTop />
       <View
         style={{
           flex: 1,
@@ -229,13 +231,13 @@ export default function Worksheet() {
           borderColor: DANGER,
         }}
       >
-        <InstanceBar label={instanceName} />
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
-            padding: 16,
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: showToleranceWarning ? WARNING_BAR_HEIGHT + 24 : 16,
             gap: 10,
-            paddingBottom: showToleranceWarning ? bannerHeight + 16 : 16,
           }}
         >
           {collection ? (
@@ -463,7 +465,7 @@ export default function Worksheet() {
               bottom: 0,
             }}
           >
-            <InstanceBar label={bannerText} centered />
+            <InstanceBar label={bannerText} centered variant="danger" safeBottom />
           </View>
         ) : null}
       </View>

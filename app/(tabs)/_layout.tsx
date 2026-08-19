@@ -1,15 +1,15 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SettingsMenu } from '../../src/ui/SettingsMenu';
+import { radHeaderOptions } from '../../src/ui/theme';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
+        ...radHeaderOptions,
         headerShown: true,
-        // On the navigator, not on one screen: Connection and Queue are
-        // app-level destinations, so the gear is in the corner of every tab.
-        headerRight: () => <SettingsMenu />,
+        headerRight: () => <SettingsMenu light />,
       }}
     >
       {/* Filled when focused, outline otherwise -- the tab bar's own colour

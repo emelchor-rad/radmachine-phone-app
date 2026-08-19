@@ -74,7 +74,7 @@ const ITEMS: Item[] = [
  */
 const HEADER_DROP = 84;
 
-export function SettingsMenu() {
+export function SettingsMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
 
   const go = (route: string) => {
@@ -100,7 +100,7 @@ export function SettingsMenu() {
         // enough to hit with a thumb at the very edge of the screen.
         style={{ paddingHorizontal: 12, paddingVertical: 8 }}
       >
-        <Ionicons name="settings-outline" size={24} color="#333" />
+        <Ionicons name="settings-outline" size={24} color={light ? '#fff' : '#333'} />
       </Pressable>
 
       <Modal

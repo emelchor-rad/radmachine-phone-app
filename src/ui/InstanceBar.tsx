@@ -1,21 +1,34 @@
 import { Text, View, type ViewStyle } from 'react-native';
-import { RADMACHINE_BLUE } from '../secure/credentials';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { RADMACHINE_BLUE, RAD_DANGER } from './theme';
 
-/** RadMachine-style top/bottom chrome bar (blue background, white text). */
+type BarVariant = 'blue' | 'danger';
+
+/** RadMachine-style chrome bar (blue instance header or red warning footer). */
 export function InstanceBar({
   label,
   style,
   centered = false,
+  variant = 'blue',
+  safeTop = false,
+  safeBottom = false,
 }: {
   label: string;
   style?: ViewStyle;
   centered?: boolean;
+  variant?: BarVariant;
+  /** Extend into the status-bar inset (worksheet top bar). */
+  safeTop?: boolean;
+  /** Respect home-indicator inset (worksheet warning footer). */
+  safeBottom?: boolean;
 }) {
-  return (
+  const backgroundColor = variant === 'danger' ? RAD_DANGER : RADMACHINE_BLUE;
+
+  const body = (
     <View
       style={[
         {
-          backgroundColor: RADMACHINE_BLUE,
+          backgroundColor,
           paddingVertical: 12,
           paddingHorizontal: 16,
         },
@@ -34,4 +47,20 @@ export function InstanceBar({
       </Text>
     </View>
   );
+
+  if (safeTop) {
+    return (
+      <SafeAreaView edges={['top']} style={{ backgroundColor }}>
+        {body}
+      </SafeAreaView>
+    );
+  }
+  if (safeBottom) {
+    return (
+      <SafeAreaView edges={['bottom']} style={{ backgroundColor }}>
+        {body}
+      </SafeAreaView>
+    );
+  }
+  return body;
 }

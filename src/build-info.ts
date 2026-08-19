@@ -1,2 +1,2 @@
 /** Shown on Dashboard so the physicist can confirm which build Expo Go loaded. */
-export const BUILD_LABEL = '692e · dl-fix';
+export const BUILD_LABEL = '692e · ui-chrome';

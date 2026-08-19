@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../src/ui/ErrorBoundary';
+import { radHeaderOptions } from '../src/ui/theme';
 import { drainOutbox } from '../src/sync/drain';
 import { refreshSchedule } from '../src/sync/refresh';
 
@@ -32,7 +34,8 @@ export default function Layout() {
 
   return (
     <ErrorBoundary>
-      <Stack>
+      <StatusBar style="light" />
+      <Stack screenOptions={radHeaderOptions}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ title: 'Connection' }} />
         <Stack.Screen name="queue" options={{ title: 'Send queue' }} />
