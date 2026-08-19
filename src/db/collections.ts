@@ -7,6 +7,8 @@ export type Collection = {
   unitName: string;
   listUrl: string;
   downloadedAt: string;
+  /** Shown when any test is out of tolerance; null means no banner text. */
+  warningMessage?: string | null;
 };
 
 function joinMc(choices: string[] | undefined): string | null {
@@ -79,9 +81,9 @@ export async function saveCollection(c: Collection, tests: TestDef[]): Promise<v
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT OR REPLACE INTO collection (utc_url, utc_name, unit_name, list_url, downloaded_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [c.utcUrl, c.utcName, c.unitName, c.listUrl, c.downloadedAt]
+      `INSERT OR REPLACE INTO collection (utc_url, utc_name, unit_name, list_url, downloaded_at, warning_message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [c.utcUrl, c.utcName, c.unitName, c.listUrl, c.downloadedAt, c.warningMessage ?? null]
     );
     await db.runAsync(`DELETE FROM test WHERE utc_url = ?`, [c.utcUrl]);
     for (const t of tests) {
@@ -125,7 +127,22 @@ export async function listCollections(): Promise<Collection[]> {
     unitName: r.unit_name,
     listUrl: r.list_url,
     downloadedAt: r.downloaded_at,
+    warningMessage: r.warning_message ?? null,
   }));
+}
+
+export async function getCollection(utcUrl: string): Promise<Collection | null> {
+  const db = await getDb();
+  const r = await db.getFirstAsync<any>(`SELECT * FROM collection WHERE utc_url = ?`, [utcUrl]);
+  if (!r) return null;
+  return {
+    utcUrl: r.utc_url,
+    utcName: r.utc_name,
+    unitName: r.unit_name,
+    listUrl: r.list_url,
+    downloadedAt: r.downloaded_at,
+    warningMessage: r.warning_message ?? null,
+  };
 }
 
 export async function getTests(utcUrl: string): Promise<TestDef[]> {

@@ -35,7 +35,8 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       utc_name    TEXT NOT NULL,
       unit_name   TEXT NOT NULL,
       list_url    TEXT NOT NULL,
-      downloaded_at TEXT NOT NULL
+      downloaded_at TEXT NOT NULL,
+      warning_message TEXT
     );
 
     CREATE TABLE IF NOT EXISTS test (
@@ -103,6 +104,11 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     // A failed migration must not brick the app on startup. Worst case the
     // criteria columns stay missing and tolerance feedback reads as no_tol.
   }
+  try {
+    await migrateCollectionWarning(db);
+  } catch {
+    // Same rationale — missing warning_message only disables the banner.
+  }
   return db;
 }
 
@@ -125,5 +131,13 @@ async function migrateTestCriteria(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const def of add) {
     const name = def.split(' ')[0];
     if (!have.has(name)) await db.execAsync(`ALTER TABLE test ADD COLUMN ${def}`);
+  }
+}
+
+/** Add warning_message to databases created before tolerance banners. */
+async function migrateCollectionWarning(db: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(collection)`);
+  if (!cols.some((c) => c.name === 'warning_message')) {
+    await db.execAsync(`ALTER TABLE collection ADD COLUMN warning_message TEXT`);
   }
 }

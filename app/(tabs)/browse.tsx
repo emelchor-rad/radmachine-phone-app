@@ -123,8 +123,12 @@ export default function Catalogue() {
     const c = new RadClient(creds.baseUrl, creds.token);
     try {
       const listUrl = definitionUrl(utc, creds.baseUrl);
-      let tests = await flattenTestList(listUrl, (u) => c.get<any>(u));
-      tests = await attachCalculationProcedures(c, tests);
+      const { tests: flatTests, warningMessage } = await flattenTestList(
+        listUrl,
+        (u) => c.get<any>(u),
+        (path, params) => c.getAll(path, params)
+      );
+      let tests = await attachCalculationProcedures(c, flatTests);
       const unitUrl = resolveUnitUrl(utc.unit, browsed.units);
       if (unitUrl) {
         try {
@@ -141,6 +145,7 @@ export default function Catalogue() {
           unitName: utc.unitLabel,
           listUrl,
           downloadedAt: nowStamp(),
+          warningMessage,
         },
         tests
       );

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { PassFail } from '../../src/ui/PassFail';
-import { getTests } from '../../src/db/collections';
+import { getCollection, getTests } from '../../src/db/collections';
 import { loadDraft, markCompleted, setValue } from '../../src/db/sessions';
 import { enqueue } from '../../src/db/outbox';
 import { buildPayload } from '../../src/sync/payload';
@@ -28,6 +28,7 @@ import {
   evaluateReading,
   EVAL_COLOUR,
   EVAL_LABEL,
+  type EvalLevel,
 } from '../../src/qa/evaluate';
 import { recalculateComposites } from '../../src/qa/recalculate';
 import { effectiveDraftValues } from '../../src/qa/effective-values';
@@ -41,6 +42,18 @@ type Pending = {
 };
 
 const DANGER = '#b00020';
+
+function isOutOfTolerance(level: EvalLevel): boolean {
+  return level === 'tolerance' || level === 'action';
+}
+
+function WarningBanner({ message }: { message: string }) {
+  return (
+    <View style={{ backgroundColor: DANGER, paddingVertical: 10, paddingHorizontal: 12 }}>
+      <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>{message}</Text>
+    </View>
+  );
+}
 
 export default function Worksheet() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
@@ -60,11 +73,14 @@ export default function Worksheet() {
   const [computed, setComputed] = useState<Record<string, number | string | null>>({});
   const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
   const [compositeWaiting, setCompositeWaiting] = useState<Record<string, string[]>>({});
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const draft = await loadDraft(sessionId);
+        const col = await getCollection(draft.utcUrl);
+        setWarningMessage(col?.warningMessage ?? null);
         setTests(await getTests(draft.utcUrl));
         setValues(draft.values);
         const seed: Record<string, string> = {};
@@ -203,10 +219,26 @@ export default function Worksheet() {
 
   const canFinish = loaded && fillable.length > 0 && live.invalid.length === 0;
 
+  const showToleranceWarning = tests.some((t) => {
+    const composite = isCompositeType(t.type);
+    const v = composite ? (computed[t.slug] ?? null) : (values[t.slug]?.value ?? null);
+    return isOutOfTolerance(evaluateReading(t.type, v, t.criteria));
+  });
+
   let lastSublist: string | null | undefined;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
+    <View
+      style={{
+        flex: 1,
+        borderWidth: showToleranceWarning ? 4 : 0,
+        borderColor: DANGER,
+      }}
+    >
+      {showToleranceWarning && warningMessage ? (
+        <WarningBanner message={warningMessage} />
+      ) : null}
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}>
       <Button
         title="Finish and queue"
         onPress={openSummary}
@@ -392,6 +424,10 @@ export default function Worksheet() {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+      {showToleranceWarning && warningMessage ? (
+        <WarningBanner message={warningMessage} />
+      ) : null}
+    </View>
   );
 }
