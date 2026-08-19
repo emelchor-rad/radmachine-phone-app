@@ -9,11 +9,12 @@ const RUNNER_BOOT_SCRIPT = `
 
   async function ensurePyodide() {
     if (pyodide) return pyodide;
-    if (typeof loadPyodide !== 'function') {
+    const loadFn = globalThis.loadPyodide;
+    if (typeof loadFn !== 'function') {
       throw new Error('loadPyodide is not defined — pyodide.js did not load');
     }
     if (!bootPromise) {
-      bootPromise = loadPyodide({ indexURL: './' });
+      bootPromise = loadFn({ indexURL: './' });
     }
     pyodide = await bootPromise;
     return pyodide;

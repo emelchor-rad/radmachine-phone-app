@@ -22,10 +22,33 @@ const PYODIDE_FILES: { module: number; name: string }[] = [
   { module: require('../../assets/pyodide/pyodide-lock.bin'), name: 'pyodide-lock.json' },
 ];
 
-type PyodideSource = { html: string; baseUrl: string };
+/** Bump when cache layout or runner HTML changes — forces a clean copy on device. */
+const PYODIDE_CACHE_VERSION = '3';
+
+type PyodideSource = { uri: string };
+
+function toFileUri(path: string): string {
+  return path.startsWith('file://') ? path : `file://${path}`;
+}
 
 async function preparePyodideSource(): Promise<PyodideSource> {
   const dir = `${FileSystem.cacheDirectory}pyodide/`;
+  const versionPath = `${dir}.cache-version`;
+
+  let cachedVersion: string | null = null;
+  try {
+    const versionInfo = await FileSystem.getInfoAsync(versionPath);
+    if (versionInfo.exists) {
+      cachedVersion = await FileSystem.readAsStringAsync(versionPath);
+    }
+  } catch {
+    cachedVersion = null;
+  }
+
+  if (cachedVersion !== PYODIDE_CACHE_VERSION) {
+    await FileSystem.deleteAsync(dir, { idempotent: true });
+  }
+
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
 
   for (const f of PYODIDE_FILES) {
@@ -34,11 +57,7 @@ async function preparePyodideSource(): Promise<PyodideSource> {
     if (!asset.localUri) {
       throw new Error(`Missing Pyodide asset ${f.name} — run npm run setup:pyodide`);
     }
-    const dest = `${dir}${f.name}`;
-    const info = await FileSystem.getInfoAsync(dest);
-    if (!info.exists) {
-      await FileSystem.copyAsync({ from: asset.localUri, to: dest });
-    }
+    await FileSystem.copyAsync({ from: asset.localUri, to: `${dir}${f.name}` });
   }
 
   const pyodideJs = await FileSystem.readAsStringAsync(`${dir}pyodide.js`);
@@ -46,8 +65,11 @@ async function preparePyodideSource(): Promise<PyodideSource> {
     throw new Error('pyodide.js in cache looks wrong — run npm run setup:pyodide');
   }
 
-  const baseUrl = Platform.OS === 'android' ? `file://${dir}` : dir;
-  return { html: buildPyodideRunnerHtml(pyodideJs), baseUrl };
+  const htmlPath = `${dir}runner.html`;
+  await FileSystem.writeAsStringAsync(htmlPath, buildPyodideRunnerHtml(pyodideJs));
+  await FileSystem.writeAsStringAsync(versionPath, PYODIDE_CACHE_VERSION);
+
+  return { uri: toFileUri(htmlPath) };
 }
 
 /**
@@ -84,11 +106,12 @@ export function PyodideEngine() {
     <View style={{ width: 0, height: 0, opacity: 0 }} pointerEvents="none">
       <WebView
         ref={ref}
-        source={{ html: source.html, baseUrl: source.baseUrl }}
+        source={{ uri: source.uri }}
         originWhitelist={['*']}
         allowFileAccess
         allowFileAccessFromFileURLs
         allowUniversalAccessFromFileURLs
+        mixedContentMode="always"
         onLoadEnd={() => {
           registerPyodideInjector((js) => ref.current?.injectJavaScript(js));
         }}
@@ -98,10 +121,16 @@ export function PyodideEngine() {
             JSON.stringify({ type: 'boot-error', message: 'Pyodide WebView failed to load' })
           )
         }
+        onHttpError={() =>
+          handlePyodideMessage(
+            JSON.stringify({ type: 'boot-error', message: 'Pyodide WebView HTTP error' })
+          )
+        }
         javaScriptEnabled
         domStorageEnabled
-        cacheEnabled
+        cacheEnabled={false}
         scrollEnabled={false}
+        {...(Platform.OS === 'android' ? { androidLayerType: 'hardware' as const } : {})}
       />
     </View>
   );

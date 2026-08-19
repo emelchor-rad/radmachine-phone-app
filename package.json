@@ -35,7 +35,7 @@
     "start:alt": "expo start --clear --port 8090",
     "start:cursor": "expo start --clear --port 8090",
     "kill-ports": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-expo-ports.ps1",
-    "setup:pyodide": "bash scripts/setup-pyodide.sh",
+    "setup:pyodide": "node scripts/setup-pyodide.cjs",
     "test": "jest",
     "android": "expo start --android",
     "ios": "expo start --ios",

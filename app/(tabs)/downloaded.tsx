@@ -363,15 +363,17 @@ export default function Downloaded() {
                 </Text>
               ) : null}
               {draft ? (
-                <View style={{ gap: 8, marginTop: 4 }}>
+                <View style={{ marginTop: 4 }}>
                   <Button
                     title="Resume session"
                     onPress={() => router.push(`/worksheet/${draft.id}`)}
                   />
-                  <Button
-                    title="Start new session"
-                    onPress={() => startSession(item.utcUrl)}
-                  />
+                  <View style={{ marginTop: 8 }}>
+                    <Button
+                      title="Start new session"
+                      onPress={() => startSession(item.utcUrl)}
+                    />
+                  </View>
                 </View>
               ) : (
                 <Button title="Start session" onPress={() => startSession(item.utcUrl)} />
