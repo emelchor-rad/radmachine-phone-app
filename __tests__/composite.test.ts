@@ -81,6 +81,33 @@ test('recalculateComposites marks gated procedures as blocked', async () => {
   expect(out.blocked.dose).toMatch(/pylinac/);
 });
 
+test('recalculateComposites waits for missing inputs instead of blocking', async () => {
+  const tests: TestDef[] = [
+    { slug: 'a', name: 'A', type: 'simple', order: 0, sublist: null },
+    { slug: 'b', name: 'B', type: 'simple', order: 1, sublist: null },
+    {
+      slug: 'avg',
+      name: 'Avg',
+      type: 'composite',
+      order: 2,
+      sublist: null,
+      calculationProcedure: 'avg = (a + b) / 2',
+    },
+  ];
+  const run = jest.fn(async () => 99);
+  const out = await recalculateComposites(tests, { a: { value: 2 } }, run);
+  expect(run).not.toHaveBeenCalled();
+  expect(out.values).toEqual({});
+  expect(out.blocked).toEqual({});
+
+  const filled = await recalculateComposites(
+    tests,
+    { a: { value: 2 }, b: { value: 4 } },
+    async () => 3
+  );
+  expect(filled.values.avg).toBe(3);
+});
+
 test('blocked token list stays stable', () => {
   expect(BLOCKED_TOKENS).toContain('import ');
 });

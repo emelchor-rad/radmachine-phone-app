@@ -2,6 +2,7 @@ import type { DraftValue, TestDef } from '../api/types';
 import { isCompositeType } from '../api/types';
 import { canRunOnDevice } from './composite-gate';
 import { buildCalcContext, type CalcContext } from './composite-context';
+import { isTransientCalcError, missingProcedureInputs } from './composite-deps';
 
 export type CompositeRunner = (
   slug: string,
@@ -41,14 +42,25 @@ export async function recalculateComposites(
       const procedure = t.calculationProcedure?.trim();
       if (!procedure) continue;
       const ctx = buildCalcContext(tests, draftValues, values);
+      const missing = missingProcedureInputs(procedure, tests, draftValues, values, t.slug);
+      if (missing.length > 0) {
+        delete blocked[t.slug];
+        continue;
+      }
       try {
         const next = await run(t.slug, procedure, ctx);
         if (values[t.slug] !== next) {
           values[t.slug] = next;
           changed = true;
         }
+        delete blocked[t.slug];
       } catch (e: any) {
-        blocked[t.slug] = e?.message ?? String(e);
+        const msg = e?.message ?? String(e);
+        if (isTransientCalcError(msg)) {
+          delete blocked[t.slug];
+          continue;
+        }
+        blocked[t.slug] = msg;
       }
     }
     if (!changed) break;
