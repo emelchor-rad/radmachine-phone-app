@@ -126,7 +126,7 @@ export default function Catalogue() {
       const { tests: flatTests, warningMessage } = await flattenTestList(
         listUrl,
         (u) => c.get<any>(u),
-        (path, params) => c.getAll(path, params)
+        (path, params) => c.getAll(path, params).catch(() => [])
       );
       let tests = await attachCalculationProcedures(c, flatTests);
       const unitUrl = resolveUnitUrl(utc.unit, browsed.units);

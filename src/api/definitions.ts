@@ -25,6 +25,19 @@ function apiBaseFromListUrl(listUrl: string): string {
   return listUrl.replace(/testlists\/\d+\/?$/, '');
 }
 
+/** Trailing numeric id from a RadMachine test list url, if any. */
+export function listIdFromUrl(listUrl: string): string | null {
+  const m = listUrl.match(/\/qa\/testlists\/(\d+)\/?$/);
+  if (m) return m[1];
+  const m2 = listUrl.match(/\/testlists\/(\d+)\/?$/);
+  return m2 ? m2[1] : null;
+}
+
+function listPkFilter(listUrl: string, field: 'test_list' | 'parent'): Record<string, string> {
+  const id = listIdFromUrl(listUrl);
+  return id ? { [field]: id } : { [field]: listUrl };
+}
+
 function resourceUrl(raw: unknown): string | null {
   if (typeof raw === 'string' && raw) return raw;
   if (raw && typeof raw === 'object') {
@@ -69,6 +82,39 @@ async function defaultFetchAll(
 }
 
 /**
+ * RadMachine's testlists-details endpoint returns every test already flattened
+ * in perform order. Prefer this when available — it avoids filter quirks on
+ * testlistmemberships (which expects a list pk, not a full url).
+ */
+async function loadTestListDetails(
+  listUrl: string,
+  fetchJson: Fetcher
+): Promise<any | null> {
+  const id = listIdFromUrl(listUrl);
+  if (!id) return null;
+  try {
+    return await fetchJson(`${apiBaseFromListUrl(listUrl)}/qa/testlists-details/${id}/`);
+  } catch {
+    return null;
+  }
+}
+
+function orderedEntriesFromDetails(details: any): SortEntry[] | null {
+  if (!Array.isArray(details?.tests) || details.tests.length === 0) return null;
+  return details.tests.map((t: any, i: number) => {
+    const testUrl = resourceUrl(t?.url ?? t);
+    if (!testUrl) throw new Error('Test list details contain an invalid test reference');
+    const sublist =
+      typeof t?.sublist === 'string'
+        ? t.sublist
+        : typeof t?.sublist_name === 'string'
+          ? t.sublist_name
+          : null;
+    return { key: [i, i] as [number, number], testUrl, sublistName: sublist };
+  });
+}
+
+/**
  * Collect test urls in RadMachine order: TestListMembership.order interleaved
  * with Sublist.order, matching TestList.ordered_tests() on the server.
  */
@@ -81,7 +127,7 @@ async function orderedTestEntries(
   const entries: SortEntry[] = [];
 
   const memberships = await fetchAll('/qa/testlistmemberships/', {
-    test_list: listUrl,
+    ...listPkFilter(listUrl, 'test_list'),
     ordering: 'order',
   });
   for (const m of memberships) {
@@ -90,7 +136,7 @@ async function orderedTestEntries(
   }
 
   const sublists = await fetchAll('/qa/sublists/', {
-    parent: listUrl,
+    ...listPkFilter(listUrl, 'parent'),
     ordering: 'order',
   });
   for (const sl of sublists) {
@@ -174,7 +220,12 @@ export async function flattenTestList(
   const root = await fetchCached(listUrl);
   warningMessage = warningFromList(root);
 
-  const entries = await orderedTestEntries(listUrl, null, fetchCached, listAll);
+  const details = await loadTestListDetails(listUrl, fetchJson);
+  if (details) warningMessage = warningFromList(details) ?? warningMessage;
+
+  const entries =
+    (details ? orderedEntriesFromDetails(details) : null) ??
+    (await orderedTestEntries(listUrl, null, fetchCached, listAll));
 
   for (const entry of entries) {
     const t = await fetchCached(entry.testUrl);

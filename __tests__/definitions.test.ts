@@ -26,39 +26,39 @@ const payloads: Record<string, any> = {
   'https://x/tests/4/': { slug: 'beam_on', name: 'Beam on', type: 'boolean' },
 };
 
-function membershipKey(listUrl: string): string {
-  return `${API}/qa/testlistmemberships/?test_list=${encodeURIComponent(listUrl)}&ordering=order`;
+function membershipKey(listId: string): string {
+  return `${API}/qa/testlistmemberships/?test_list=${listId}&ordering=order`;
 }
 
-function sublistKey(listUrl: string): string {
-  return `${API}/qa/sublists/?parent=${encodeURIComponent(listUrl)}&ordering=order`;
+function sublistKey(listId: string): string {
+  return `${API}/qa/sublists/?parent=${listId}&ordering=order`;
 }
 
 /** RadMachine order: top test, then CBCT sublist, then Safety sublist. */
 const memberships: Record<string, any> = {
-  [membershipKey('https://x/testlists/571/')]: {
+  [membershipKey('571')]: {
     results: [{ test: 'https://x/tests/1/', order: 0 }],
   },
-  [membershipKey('https://x/testlists/900/')]: {
+  [membershipKey('900')]: {
     results: [
       { test: 'https://x/tests/2/', order: 0 },
       { test: 'https://x/tests/3/', order: 1 },
     ],
   },
-  [membershipKey('https://x/testlists/901/')]: {
+  [membershipKey('901')]: {
     results: [{ test: 'https://x/tests/4/', order: 0 }],
   },
 };
 
 const sublists: Record<string, any> = {
-  [sublistKey('https://x/testlists/571/')]: {
+  [sublistKey('571')]: {
     results: [
       { child: 'https://x/testlists/900/', order: 1 },
       { child: 'https://x/testlists/901/', order: 2 },
     ],
   },
-  [sublistKey('https://x/testlists/900/')]: { results: [] },
-  [sublistKey('https://x/testlists/901/')]: { results: [] },
+  [sublistKey('900')]: { results: [] },
+  [sublistKey('901')]: { results: [] },
 };
 
 const fetcher = async (url: string) => {
@@ -93,7 +93,7 @@ const payloadsSharedTest: Record<string, any> = {
 
 const membershipsShared: Record<string, any> = {
   ...memberships,
-  [membershipKey('https://x/testlists/901/')]: {
+  [membershipKey('901')]: {
     results: [
       { test: 'https://x/tests/2/', order: 0 },
       { test: 'https://x/tests/4/', order: 1 },
@@ -128,6 +128,30 @@ test('warning_message is read from the test list', async () => {
   expect(warningMessage).toBe('Do not treat');
 });
 
+test('prefers testlists-details order when that endpoint is available', async () => {
+  const detailsPayloads: Record<string, any> = {
+    ...payloads,
+    'https://x/api/qa/testlists-details/100/': {
+      warning_message: 'Do not treat',
+      tests: [
+        { url: 'https://x/tests/num/', slug: 'just_a_number', name: 'Just a number', type: 'simple' },
+        { url: 'https://x/tests/calc/', slug: 'just_a_calc', name: 'Just a calculation', type: 'composite' },
+      ],
+    },
+    'https://x/tests/num/': { slug: 'just_a_number', name: 'Just a number', type: 'simple' },
+    'https://x/tests/calc/': { slug: 'just_a_calc', name: 'Just a calculation', type: 'composite' },
+    'https://x/testlists/100/': {
+      name: 'Simple composite test list',
+      // Wrong M2M order on purpose — details should win.
+      tests: ['https://x/tests/calc/', 'https://x/tests/num/'],
+      test_lists: [],
+    },
+  };
+  const f = async (url: string) => detailsPayloads[url];
+  const out = await flatten('https://x/api/qa/testlists/100/', f, fetchAll);
+  expect(out.map((t) => t.slug)).toEqual(['just_a_number', 'just_a_calc']);
+});
+
 test('input tests come before composites when membership order says so', async () => {
   const compositePayloads: Record<string, any> = {
     'https://x/testlists/100/': {
@@ -139,13 +163,13 @@ test('input tests come before composites when membership order says so', async (
     },
     'https://x/tests/num/': { slug: 'just_a_number', name: 'Just a number', type: 'simple' },
     'https://x/tests/calc/': { slug: 'just_a_calc', name: 'Just a calculation', type: 'composite' },
-    [membershipKey('https://x/testlists/100/')]: {
+    [membershipKey('100')]: {
       results: [
         { test: 'https://x/tests/num/', order: 0 },
         { test: 'https://x/tests/calc/', order: 1 },
       ],
     },
-    [sublistKey('https://x/testlists/100/')]: { results: [] },
+    [sublistKey('100')]: { results: [] },
   };
   const f = async (url: string) => compositePayloads[url];
   const fa: FetchAll = async (path, params) => {
@@ -206,7 +230,7 @@ test('a test type v1 cannot render is rejected loudly', async () => {
 test('composite and scomposite tests are included for display', async () => {
   const compositeMemberships: Record<string, any> = {
     ...memberships,
-    [membershipKey('https://x/testlists/901/')]: {
+    [membershipKey('901')]: {
       results: [
         { test: 'https://x/tests/4/', order: 0 },
         { test: 'https://x/tests/5/', order: 1 },
