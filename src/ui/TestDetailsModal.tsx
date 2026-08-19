@@ -1,7 +1,7 @@
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import type { TestDef } from '../api/types';
 import { isCompositeType } from '../api/types';
-import { CriteriaDisplay } from './CriteriaDisplay';
+import { CriteriaDisplay, CRITERIA_ACCENT } from './CriteriaDisplay';
 
 export function TestDetailsModal({
   test,
@@ -50,7 +50,7 @@ export function TestDetailsModal({
           <Pressable
             onPress={onClose}
             style={{
-              backgroundColor: '#1565c0',
+              backgroundColor: CRITERIA_ACCENT,
               padding: 12,
               borderRadius: 4,
               alignItems: 'center',

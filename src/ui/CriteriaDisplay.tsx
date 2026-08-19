@@ -1,73 +1,134 @@
 import { Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { CriteriaBandValues, CriteriaDisplay as CriteriaModel } from '../qa/evaluate';
 import { criteriaDisplay } from '../qa/evaluate';
 import type { TestCriteria } from '../api/types';
+import { RADMACHINE_BLUE } from './theme';
 
-const ACTION = '#b00020';
-const TOLERANCE = '#8a6d00';
-const OK = '#1b7f3b';
-const MUTED = '#666';
+const ACTION_BG = '#e74c3c';
+const TOLERANCE = '#d68910';
+const OK = '#27ae60';
+const MUTED = '#888';
+const BORDER = '#ddd';
 
-function fmtBand(n: number): string {
+function fmtRef(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
-function ScaleBadge({
-  label,
-  value,
-  colour,
-}: {
-  label: string;
-  value: string;
-  colour: string;
-}) {
-  return (
-    <View style={{ alignItems: 'center', gap: 3, minWidth: 56 }}>
-      <Text style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase' }}>{label}</Text>
+function fmtBand(n: number): string {
+  return Number.isInteger(n) ? `${n}.00` : n.toFixed(2);
+}
+
+type PointKind = 'action' | 'tolerance' | 'reference';
+
+function ThresholdBadge({ kind, value }: { kind: PointKind; value: string }) {
+  if (kind === 'action') {
+    return (
       <View
         style={{
-          backgroundColor: colour,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          backgroundColor: ACTION_BG,
           paddingHorizontal: 10,
           paddingVertical: 6,
-          borderRadius: 14,
-          minWidth: 48,
-          alignItems: 'center',
+          borderRadius: 16,
         }}
       >
+        <Ionicons name="close" size={14} color="white" />
         <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 13 }}>{value}</Text>
       </View>
+    );
+  }
+  if (kind === 'tolerance') {
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 4,
+          backgroundColor: 'white',
+          borderWidth: 1,
+          borderColor: BORDER,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
+          borderRadius: 16,
+        }}
+      >
+        <Ionicons name="alert" size={14} color={TOLERANCE} />
+        <Text style={{ color: TOLERANCE, fontWeight: 'bold', fontSize: 13 }}>{value}</Text>
+      </View>
+    );
+  }
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: BORDER,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+      }}
+    >
+      <Ionicons name="checkmark" size={14} color={OK} />
+      <Text style={{ color: OK, fontWeight: 'bold', fontSize: 13 }}>{value}</Text>
     </View>
   );
 }
 
-function AbsoluteScale({ bands }: { bands: CriteriaBandValues }) {
-  const { actLow, tolLow, ref, tolHigh, actHigh } = bands;
+function ScalePoint({
+  label,
+  kind,
+  value,
+}: {
+  label: string;
+  kind: PointKind;
+  value: string;
+}) {
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ flex: 1, alignItems: 'center', gap: 5 }}>
+      <Text style={{ fontSize: 11, color: MUTED, textAlign: 'center' }}>{label}</Text>
+      <View style={{ width: 1, height: 10, backgroundColor: '#bbb' }} />
+      <ThresholdBadge kind={kind} value={value} />
+    </View>
+  );
+}
+
+/** RadMachine web-style horizontal ref/tol/action scale. */
+function RadMachineScale({ bands }: { bands: CriteriaBandValues }) {
+  const { actLow, tolLow, ref, tolHigh, actHigh } = bands;
+  const points: { label: string; kind: PointKind; value: number | null; fmt: (n: number) => string }[] =
+    [
+      { label: 'Action', kind: 'action', value: actLow, fmt: fmtBand },
+      { label: 'Tolerance', kind: 'tolerance', value: tolLow, fmt: fmtBand },
+      { label: 'Reference', kind: 'reference', value: ref, fmt: fmtRef },
+      { label: 'Tolerance', kind: 'tolerance', value: tolHigh, fmt: fmtBand },
+      { label: 'Action', kind: 'action', value: actHigh, fmt: fmtBand },
+    ];
+
+  return (
+    <View style={{ paddingVertical: 4 }}>
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          flexWrap: 'wrap',
-          gap: 8,
+          position: 'absolute',
+          left: '10%',
+          right: '10%',
+          top: 22,
+          height: 1,
+          backgroundColor: '#ccc',
         }}
-      >
-        {actLow !== null ? (
-          <ScaleBadge label="Action" value={fmtBand(actLow)} colour={ACTION} />
-        ) : null}
-        {tolLow !== null ? (
-          <ScaleBadge label="Tolerance" value={fmtBand(tolLow)} colour={TOLERANCE} />
-        ) : null}
-        <ScaleBadge label="Reference" value={fmtBand(ref)} colour={OK} />
-        {tolHigh !== null ? (
-          <ScaleBadge label="Tolerance" value={fmtBand(tolHigh)} colour={TOLERANCE} />
-        ) : null}
-        {actHigh !== null ? (
-          <ScaleBadge label="Action" value={fmtBand(actHigh)} colour={ACTION} />
-        ) : null}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {points.map((p, i) =>
+          p.value !== null ? (
+            <ScalePoint key={`${p.label}-${i}`} label={p.label} kind={p.kind} value={p.fmt(p.value)} />
+          ) : null
+        )}
       </View>
-      <View style={{ height: 4, backgroundColor: '#ddd', borderRadius: 2 }} />
     </View>
   );
 }
@@ -81,25 +142,20 @@ function CriteriaBody({ model }: { model: CriteriaModel }) {
     );
   }
   if (model.kind === 'boolean') {
-    return (
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontWeight: '600' }}>Reference</Text>
-        <ScaleBadge label="Expected" value={model.refLabel} colour={OK} />
-      </View>
-    );
+    return <ScalePoint label="Reference" kind="reference" value={model.refLabel} />;
   }
   if (model.kind === 'multchoice') {
     return (
       <View style={{ gap: 8 }}>
         {model.pass.length ? (
           <View>
-            <Text style={{ fontWeight: '600', marginBottom: 4 }}>Pass choices</Text>
+            <Text style={{ fontWeight: '600', marginBottom: 4, color: OK }}>Pass choices</Text>
             <Text>{model.pass.join(', ')}</Text>
           </View>
         ) : null}
         {model.tol.length ? (
           <View>
-            <Text style={{ fontWeight: '600', marginBottom: 4 }}>Tolerance choices</Text>
+            <Text style={{ fontWeight: '600', marginBottom: 4, color: TOLERANCE }}>Tolerance choices</Text>
             <Text>{model.tol.join(', ')}</Text>
           </View>
         ) : null}
@@ -110,83 +166,36 @@ function CriteriaBody({ model }: { model: CriteriaModel }) {
     );
   }
   if (model.kind === 'ref_only') {
-    return (
-      <View style={{ gap: 6 }}>
-        <Text style={{ fontWeight: '600' }}>Reference only (no tolerance set)</Text>
-        <ScaleBadge label="Reference" value={fmtBand(model.ref)} colour={OK} />
-      </View>
-    );
+    return <ScalePoint label="Reference" kind="reference" value={fmtRef(model.ref)} />;
   }
   if (model.kind === 'absolute') {
-    return <AbsoluteScale bands={model.bands} />;
+    return <RadMachineScale bands={model.bands} />;
   }
   const pct = (n: number | null) => (n === null ? '—' : `${n}%`);
   return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ fontWeight: '600' }}>Percent tolerance relative to reference</Text>
-      <ScaleBadge label="Reference" value={fmtBand(model.ref)} colour={OK} />
-      <Text>
-        Tolerance band: {pct(model.tolLow)} to {pct(model.tolHigh)}
+    <View style={{ gap: 8 }}>
+      <ScalePoint label="Reference" kind="reference" value={fmtRef(model.ref)} />
+      <Text style={{ color: MUTED, fontSize: 13 }}>
+        Tolerance: {pct(model.tolLow)} to {pct(model.tolHigh)}
       </Text>
-      <Text>
-        Action band: {pct(model.actLow)} to {pct(model.actHigh)}
+      <Text style={{ color: MUTED, fontSize: 13 }}>
+        Action: {pct(model.actLow)} to {pct(model.actHigh)}
       </Text>
     </View>
   );
 }
 
-/** RadMachine-style reference and tolerance display. */
-export function CriteriaDisplay({
-  criteria,
-  compact = false,
-}: {
-  criteria?: TestCriteria | null;
-  compact?: boolean;
-}) {
+/** RadMachine-style reference and tolerance display (details modal only). */
+export function CriteriaDisplay({ criteria }: { criteria?: TestCriteria | null }) {
   const model = criteriaDisplay(criteria);
 
-  if (compact) {
-    if (model.kind === 'none') return null;
-    if (model.kind === 'absolute') {
-      const { actLow, tolLow, ref, tolHigh, actHigh } = model.bands;
-      const parts = [`Ref ${fmtBand(ref)}`];
-      if (tolLow !== null && tolHigh !== null) {
-        parts.push(`Tol ${fmtBand(tolLow)}–${fmtBand(tolHigh)}`);
-      }
-      if (actLow !== null && actHigh !== null) {
-        parts.push(`Act ${fmtBand(actLow)}–${fmtBand(actHigh)}`);
-      }
-      return <Text style={{ color: MUTED, fontSize: 12 }}>{parts.join(' · ')}</Text>;
-    }
-    const summary =
-      model.kind === 'boolean'
-        ? `Ref: ${model.refLabel}`
-        : model.kind === 'ref_only'
-          ? `Ref: ${fmtBand(model.ref)}`
-          : model.kind === 'multchoice'
-            ? [
-                model.pass.length ? `Pass: ${model.pass.join(', ')}` : '',
-                model.tol.length ? `Tol: ${model.tol.join(', ')}` : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')
-            : null;
-    return summary ? <Text style={{ color: MUTED, fontSize: 12 }}>{summary}</Text> : null;
-  }
-
   return (
-    <View
-      style={{
-        gap: 8,
-        padding: 12,
-        backgroundColor: '#f7f7f7',
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: '#ddd',
-      }}
-    >
-      <Text style={{ fontWeight: 'bold', fontSize: 14 }}>Reference & tolerance</Text>
+    <View style={{ gap: 8, paddingVertical: 4 }}>
+      <Text style={{ fontWeight: 'bold', fontSize: 14, color: '#333' }}>Reference & tolerance</Text>
       <CriteriaBody model={model} />
     </View>
   );
 }
+
+/** Modal primary button colour — matches app chrome. */
+export const CRITERIA_ACCENT = RADMACHINE_BLUE;
