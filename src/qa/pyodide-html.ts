@@ -1,10 +1,5 @@
-/** Hidden WebView HTML — loads Pyodide from bundled assets (same baseUrl directory). */
-export const PYODIDE_RUNNER_HTML = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8" /></head>
-<body>
-<script src="pyodide.js"></script>
-<script>
+/** Boot logic only — pyodide.js is inlined by buildPyodideRunnerHtml(). */
+const RUNNER_BOOT_SCRIPT = `
   let pyodide = null;
   let bootPromise = null;
 
@@ -14,6 +9,9 @@ export const PYODIDE_RUNNER_HTML = `<!DOCTYPE html>
 
   async function ensurePyodide() {
     if (pyodide) return pyodide;
+    if (typeof loadPyodide !== 'function') {
+      throw new Error('loadPyodide is not defined — pyodide.js did not load');
+    }
     if (!bootPromise) {
       bootPromise = loadPyodide({ indexURL: './' });
     }
@@ -48,6 +46,27 @@ export const PYODIDE_RUNNER_HTML = `<!DOCTYPE html>
   };
 
   boot();
-</script>
+`;
+
+/** Prevent inline script termination if pyodide.js ever contains a closing tag. */
+function escapeForInlineScript(js: string): string {
+  return js.replace(/<\/script/gi, '<\\/script');
+}
+
+/**
+ * Build WebView HTML with pyodide.js inlined.
+ *
+ * Android WebView blocks external &lt;script src&gt; from file:// when the page
+ * is loaded via source={{ html }}. Inlining the ~15 KB loader fixes
+ * "loadPyodide is not defined".
+ */
+export function buildPyodideRunnerHtml(pyodideJs: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body>
+<script>${escapeForInlineScript(pyodideJs)}</script>
+<script>${RUNNER_BOOT_SCRIPT}</script>
 </body>
 </html>`;
+}
