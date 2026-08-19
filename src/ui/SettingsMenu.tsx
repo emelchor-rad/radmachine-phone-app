@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { clearAllDownloaded } from '../db/clear-downloaded';
 
 /**
  * The gear in the header, and the little menu it opens.
@@ -20,12 +21,46 @@ import { router } from 'expo-router';
 type Item = {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
-  route: string;
+  route?: string;
+  destructive?: boolean;
+  onPress?: () => void;
 };
 
 const ITEMS: Item[] = [
   { label: 'Connection', icon: 'link-outline', route: '/connect' },
   { label: 'Queue', icon: 'cloud-upload-outline', route: '/queue' },
+  {
+    label: 'Clear downloaded',
+    icon: 'trash-outline',
+    destructive: true,
+    onPress: () => {
+      Alert.alert(
+        'Clear downloaded lists?',
+        'Removes every downloaded list, test, worksheet draft, schedule row, and queued payload. Your connection settings stay saved.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Clear everything',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                try {
+                  await clearAllDownloaded();
+                  Alert.alert(
+                    'Downloaded data cleared',
+                    'Use Browse to download lists again. Open Connection once if the instance name bar does not appear.'
+                  );
+                  router.replace('/');
+                } catch (e: any) {
+                  Alert.alert('Could not clear', e?.message ?? String(e));
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+  },
 ];
 
 /**
@@ -47,6 +82,12 @@ export function SettingsMenu() {
     // makes the destination arrive behind a grey backdrop.
     setOpen(false);
     router.push(route);
+  };
+
+  const activate = (item: Item) => {
+    setOpen(false);
+    if (item.onPress) item.onPress();
+    else if (item.route) go(item.route);
   };
 
   return (
@@ -91,9 +132,9 @@ export function SettingsMenu() {
           >
             {ITEMS.map((item) => (
               <Pressable
-                key={item.route}
+                key={item.label}
                 accessibilityRole="button"
-                onPress={() => go(item.route)}
+                onPress={() => activate(item)}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -102,8 +143,10 @@ export function SettingsMenu() {
                   paddingHorizontal: 14,
                 }}
               >
-                <Ionicons name={item.icon} size={18} color="#333" />
-                <Text style={{ fontSize: 16 }}>{item.label}</Text>
+                <Ionicons name={item.icon} size={18} color={item.destructive ? '#b00020' : '#333'} />
+                <Text style={{ fontSize: 16, color: item.destructive ? '#b00020' : '#333' }}>
+                  {item.label}
+                </Text>
               </Pressable>
             ))}
           </View>
