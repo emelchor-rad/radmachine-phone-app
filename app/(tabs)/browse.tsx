@@ -59,6 +59,7 @@ export default function Catalogue() {
   const [unitFilter, setUnitFilter] = useState(ALL);
   const [freqFilter, setFreqFilter] = useState(ALL);
   const [msg, setMsg] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   const loadDownloaded = useCallback(async () => {
     try {
@@ -112,6 +113,7 @@ export default function Catalogue() {
   );
 
   const download = async (utc: CatalogueRow) => {
+    if (downloading) return;
     const creds = await loadCredentials();
     if (!creds) return router.push('/connect');
     if (creds.baseUrl !== browsed.baseUrl) {
@@ -119,19 +121,23 @@ export default function Catalogue() {
       setMsg('These results came from a different instance. Press Browse again.');
       return;
     }
-    setMsg(`Downloading ${utc.name}...`);
+    setDownloading(true);
+    setMsg(`Downloading ${utc.name}…`);
     const c = new RadClient(creds.baseUrl, creds.token);
     try {
       const listUrl = definitionUrl(utc, creds.baseUrl);
+      setMsg(`Downloading ${utc.name} — reading test list…`);
       const { tests: flatTests, warningMessage } = await flattenTestList(
         listUrl,
         (u) => c.get<any>(u),
         (path, params) => c.getAll(path, params).catch(() => [])
       );
+      setMsg(`Downloading ${utc.name} — loading calculations…`);
       let tests = await attachCalculationProcedures(c, flatTests);
       const unitUrl = resolveUnitUrl(utc.unit, browsed.units);
       let criteriaNote = '';
       if (unitUrl) {
+        setMsg(`Downloading ${utc.name} — loading ref/tol…`);
         try {
           tests = await attachCriteria(c, unitUrl, tests);
           const n = countWithCriteria(tests);
@@ -143,6 +149,7 @@ export default function Catalogue() {
           criteriaNote = ` (ref/tol download failed: ${e?.message ?? e})`;
         }
       }
+      setMsg(`Downloading ${utc.name} — saving…`);
       await saveCollection(
         {
           utcUrl: utc.url,
@@ -164,6 +171,8 @@ export default function Catalogue() {
       router.push('/downloaded');
     } catch (e: any) {
       setMsg(e.message);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -233,17 +242,22 @@ export default function Catalogue() {
                     accessibilityRole="button"
                     accessibilityLabel={`Download ${item.name} again`}
                     onPress={() => download(item)}
+                    disabled={downloading}
                     hitSlop={6}
                   >
                     <Text
-                      style={{ color: MUTED, fontSize: 13, textDecorationLine: 'underline' }}
+                      style={{
+                        color: downloading ? '#ccc' : MUTED,
+                        fontSize: 13,
+                        textDecorationLine: 'underline',
+                      }}
                     >
                       Download again
                     </Text>
                   </Pressable>
                 </View>
               ) : (
-                <Button title="Download" onPress={() => download(item)} />
+                <Button title="Download" onPress={() => download(item)} disabled={downloading} />
               )}
             </View>
           );

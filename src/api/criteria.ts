@@ -154,6 +154,20 @@ type UtiLookup = {
   bySlug: Map<string, RawUti>;
 };
 
+/** True when this UTI belongs to a test on the list being downloaded. */
+export function utiMatchesListTest(uti: RawUti, tests: TestDef[]): boolean {
+  const utiNorm = normalizeApiUrl(uti.test);
+  const utiId = idFromUrl(uti.test);
+  for (const t of tests) {
+    if (!t.testUrl) continue;
+    if (uti.test === t.testUrl) return true;
+    if (utiNorm === normalizeApiUrl(t.testUrl)) return true;
+    const testId = idFromUrl(t.testUrl);
+    if (utiId && testId && utiId === testId) return true;
+  }
+  return false;
+}
+
 function findUti(lookup: UtiLookup, testUrl: string, slug: string): RawUti | undefined {
   return (
     lookup.byExactUrl.get(testUrl) ??
@@ -186,6 +200,23 @@ async function fetchUnitUtis(client: RadClient, unitUrl: string): Promise<RawUti
   return [];
 }
 
+/** Run async work on items with at most `limit` requests in flight. */
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      await fn(items[idx]);
+    }
+  });
+  await Promise.all(workers);
+}
+
 async function buildUtiLookup(
   client: RadClient,
   utis: RawUti[],
@@ -196,27 +227,21 @@ async function buildUtiLookup(
   const byTestId = new Map<string, RawUti>();
   const bySlug = new Map<string, RawUti>();
 
-  const uniqueTestUrls = new Set(utis.map((u) => u.test));
-  for (const t of tests) {
-    if (t.testUrl) uniqueTestUrls.add(t.testUrl);
-  }
-
   const slugByNorm = new Map<string, string>();
   for (const t of tests) {
     if (t.slug && t.testUrl) slugByNorm.set(normalizeApiUrl(t.testUrl), t.slug);
   }
 
-  await Promise.all(
-    [...uniqueTestUrls].map(async (url) => {
-      if (slugByNorm.has(normalizeApiUrl(url))) return;
-      try {
-        const raw = await client.get<{ slug?: string }>(url);
-        if (raw.slug) slugByNorm.set(normalizeApiUrl(url), raw.slug);
-      } catch {
-        // Slug lookup is a fallback only.
-      }
-    })
-  );
+  // Only fetch slugs for UTIs on this list — not every test configured on the unit.
+  await mapWithConcurrency(utis, 6, async (u) => {
+    if (slugByNorm.has(normalizeApiUrl(u.test))) return;
+    try {
+      const raw = await client.get<{ slug?: string }>(u.test);
+      if (raw.slug) slugByNorm.set(normalizeApiUrl(u.test), raw.slug);
+    } catch {
+      // Slug lookup is a fallback only.
+    }
+  });
 
   for (const u of utis) {
     byExactUrl.set(u.test, u);
@@ -244,22 +269,20 @@ async function loadRefTolMaps(
     if (typeof u.tolerance === 'string') tolUrls.add(u.tolerance);
   }
 
-  await Promise.all([
-    ...[...refUrls].map(async (url) => {
-      try {
-        refs.set(url, await client.get<RawRef>(url));
-      } catch {
-        // One broken link must not drop criteria for every other test.
-      }
-    }),
-    ...[...tolUrls].map(async (url) => {
-      try {
-        tols.set(url, await client.get<RawTol>(url));
-      } catch {
-        // Same rationale as references.
-      }
-    }),
-  ]);
+  await mapWithConcurrency([...refUrls], 6, async (url) => {
+    try {
+      refs.set(url, await client.get<RawRef>(url));
+    } catch {
+      // One broken link must not drop criteria for every other test.
+    }
+  });
+  await mapWithConcurrency([...tolUrls], 6, async (url) => {
+    try {
+      tols.set(url, await client.get<RawTol>(url));
+    } catch {
+      // Same rationale as references.
+    }
+  });
 
   return { refs, tols };
 }
@@ -278,7 +301,8 @@ export async function attachCriteria(
   const withUrl = tests.filter((t): t is TestDef & { testUrl: string } => !!t.testUrl);
   if (withUrl.length === 0) return tests;
 
-  const utis = await fetchUnitUtis(client, unitUrl);
+  const allUtis = await fetchUnitUtis(client, unitUrl);
+  const utis = allUtis.filter((u) => utiMatchesListTest(u, tests));
   if (utis.length === 0) {
     return tests.map((t) => {
       if (!t.testUrl) return t;

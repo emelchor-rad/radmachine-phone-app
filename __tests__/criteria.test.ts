@@ -3,6 +3,7 @@ import {
   countWithCriteria,
   criteriaFromUti,
   normalizeApiUrl,
+  utiMatchesListTest,
 } from '../src/api/criteria';
 import { listHasToleranceWarning } from '../src/qa/tolerance-warning';
 import type { TestCriteria, TestDef } from '../src/api/types';
@@ -52,6 +53,31 @@ test('criteriaFromUti accepts embedded reference and tolerance objects', () => {
     new Map()
   );
   expect(c).toMatchObject({ refValue: 50, tolType: 'absolute', tolLow: -2, actHigh: 5 });
+});
+
+test('utiMatchesListTest matches by normalized url or test id', () => {
+  const uti = {
+    test: `${BASE}/qa/tests/99/`,
+    reference: null,
+    tolerance: null,
+  };
+  const tests: TestDef[] = [
+    {
+      slug: 'x',
+      name: 'X',
+      type: 'simple',
+      order: 0,
+      sublist: null,
+      testUrl: `${BASE}/qa/tests/99`,
+    },
+  ];
+  expect(utiMatchesListTest(uti, tests)).toBe(true);
+  expect(
+    utiMatchesListTest(
+      { test: `${BASE}/qa/tests/100/`, reference: null, tolerance: null },
+      tests
+    )
+  ).toBe(false);
 });
 
 test('attachCriteria uses unittestinfos and matches by test id when urls differ slightly', async () => {
