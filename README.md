@@ -9,7 +9,6 @@ Proof of concept. Single user, sandbox tenant `emelchor`, run through Expo Go.
 
 ```bash
 npm install
-npm run setup:pyodide   # once — bundles Python (~14 MB) for offline composite calc
 npm run start:clean
 ```
 
