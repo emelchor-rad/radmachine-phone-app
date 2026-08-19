@@ -38,7 +38,7 @@ export default function Layout() {
         <Stack.Screen name="queue" options={{ title: 'Send queue' }} />
         <Stack.Screen
           name="worksheet/[sessionId]"
-          options={{ title: 'Worksheet', contentStyle: { flex: 1 } }}
+          options={{ headerShown: false, contentStyle: { flex: 1 } }}
         />
       </Stack>
     </ErrorBoundary>

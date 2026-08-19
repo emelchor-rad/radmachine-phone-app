@@ -34,6 +34,8 @@ import { effectiveDraftValues } from '../../src/qa/effective-values';
 import { recalculateComposites } from '../../src/qa/recalculate';
 import { runCompositeScript } from '../../src/qa/python-engine';
 import { isOutOfTolerance, listHasToleranceWarning } from '../../src/qa/tolerance-warning';
+import { loadCredentials, resolveInstanceName } from '../../src/secure/credentials';
+import { InstanceBar } from '../../src/ui/InstanceBar';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -52,14 +54,6 @@ function WorksheetTitle({ unitName, listName }: { unitName: string; listName: st
       <Text style={{ fontSize: 17, fontWeight: 'bold', lineHeight: 24 }}>
         Perform {unitName} :: {listName}
       </Text>
-    </View>
-  );
-}
-
-function WarningBanner({ message }: { message: string }) {
-  return (
-    <View style={{ backgroundColor: DANGER, paddingVertical: 10, paddingHorizontal: 12 }}>
-      <Text style={{ color: 'white', fontWeight: 'bold', textAlign: 'center' }}>{message}</Text>
     </View>
   );
 }
@@ -95,6 +89,14 @@ export default function Worksheet() {
   const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
   const [compositeWaiting, setCompositeWaiting] = useState<Record<string, string[]>>({});
   const [detailTest, setDetailTest] = useState<TestDef | null>(null);
+  const [instanceName, setInstanceName] = useState('RadMachine');
+
+  useEffect(() => {
+    (async () => {
+      const creds = await loadCredentials();
+      if (creds) setInstanceName(await resolveInstanceName(creds.baseUrl));
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -227,7 +229,7 @@ export default function Worksheet() {
           borderColor: DANGER,
         }}
       >
-        {showToleranceWarning ? <WarningBanner message={bannerText} /> : null}
+        <InstanceBar label={instanceName} />
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{
@@ -461,7 +463,7 @@ export default function Worksheet() {
               bottom: 0,
             }}
           >
-            <WarningBanner message={bannerText} />
+            <InstanceBar label={bannerText} centered />
           </View>
         ) : null}
       </View>

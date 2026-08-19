@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { RadClient } from '../src/api/client';
-import { baseUrlFor, saveCredentials } from '../src/secure/credentials';
+import { baseUrlFor, fetchAndStoreInstanceName, saveCredentials } from '../src/secure/credentials';
 
 export default function Connect() {
   const [tenant, setTenant] = useState('emelchor');
@@ -15,6 +15,7 @@ export default function Connect() {
     try {
       const c = new RadClient(baseUrl, token.trim());
       await c.get('/qa/unittestcollections/', { limit: '1' });
+      await fetchAndStoreInstanceName(c, baseUrl);
       await saveCredentials(baseUrl, token.trim());
       setStatus('Connected.');
       router.replace('/');
