@@ -1,12 +1,6 @@
 import type { RadClient } from './client';
 import type { TestCriteria, TestDef } from './types';
 
-type RawUti = {
-  test: string;
-  reference: string | null;
-  tolerance: string | null;
-};
-
 type RawRef = { type?: string; value?: number | null };
 type RawTol = {
   type?: string;
@@ -18,10 +12,65 @@ type RawTol = {
   mc_tol_choices?: string | null;
 };
 
+type RawUti = {
+  test: string;
+  reference: string | RawRef | null;
+  tolerance: string | RawTol | null;
+};
+
+/** RadMachine registers the list endpoint as unittestinfos (see radmachine-api-examples). */
+const UTI_LIST_PATHS = ['/qa/unittestinfos/', '/qa/unittestinfo/'];
+
 /** Trailing numeric id from a RadMachine unit or test url. */
 function idFromUrl(url: string): string | null {
   const m = url.match(/\/(\d+)\/?$/);
   return m ? m[1] : null;
+}
+
+/** API url from a hyperlinked field or an embedded resource object. */
+function resourceUrl(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (raw && typeof raw === 'object') {
+    const url = (raw as Record<string, unknown>).url;
+    if (typeof url === 'string' && url.trim()) return url.trim();
+  }
+  return null;
+}
+
+function isEmbeddedRef(raw: unknown): raw is RawRef {
+  return !!raw && typeof raw === 'object' && 'value' in (raw as RawRef);
+}
+
+function isEmbeddedTol(raw: unknown): raw is RawTol {
+  return !!raw && typeof raw === 'object' && 'type' in (raw as RawTol);
+}
+
+function normalizeUti(raw: Record<string, unknown>): RawUti | null {
+  const test = resourceUrl(raw.test);
+  if (!test) return null;
+  return {
+    test,
+    reference: (raw.reference ?? null) as RawUti['reference'],
+    tolerance: (raw.tolerance ?? null) as RawUti['tolerance'],
+  };
+}
+
+function resolveRef(
+  raw: string | RawRef | null,
+  refs: Map<string, RawRef>
+): RawRef | undefined {
+  if (!raw) return undefined;
+  if (isEmbeddedRef(raw)) return raw;
+  return refs.get(raw);
+}
+
+function resolveTol(
+  raw: string | RawTol | null,
+  tols: Map<string, RawTol>
+): RawTol | undefined {
+  if (!raw) return undefined;
+  if (isEmbeddedTol(raw)) return raw;
+  return tols.get(raw);
 }
 
 /** Compare API urls that may differ only by trailing slash or scheme. */
@@ -55,8 +104,8 @@ export function criteriaFromUti(
   refs: Map<string, RawRef>,
   tols: Map<string, RawTol>
 ): TestCriteria | null {
-  const tol = uti.tolerance ? tols.get(uti.tolerance) : undefined;
-  const ref = uti.reference ? refs.get(uti.reference) : undefined;
+  const tol = resolveTol(uti.tolerance, tols);
+  const ref = resolveRef(uti.reference, refs);
 
   if (tol?.type === 'multchoice') {
     const mcPassChoices = parseMcChoices(tol.mc_pass_choices);
@@ -119,29 +168,47 @@ function findUti(lookup: UtiLookup, testUrl: string, slug: string): RawUti | und
 
 async function fetchUnitUtis(client: RadClient, unitUrl: string): Promise<RawUti[]> {
   const unitId = idFromUrl(unitUrl);
-  if (unitId) {
-    const byId = await client.getAll<RawUti>('/qa/unittestinfo/', {
-      unit: unitId,
-      limit: '500',
-    });
-    if (byId.length > 0) return byId;
+  const paramSets: Record<string, string>[] = [];
+  if (unitId) paramSets.push({ unit: unitId, limit: '500' });
+  paramSets.push({ unit: unitUrl, limit: '500' });
+
+  for (const path of UTI_LIST_PATHS) {
+    for (const params of paramSets) {
+      try {
+        const rows = await client.getAll<Record<string, unknown>>(path, params);
+        const utis = rows.map(normalizeUti).filter((u): u is RawUti => u !== null);
+        if (utis.length > 0) return utis;
+      } catch {
+        // Try the next path/filter combination.
+      }
+    }
   }
-  return client.getAll<RawUti>('/qa/unittestinfo/', {
-    unit: unitUrl,
-    limit: '500',
-  });
+  return [];
 }
 
-async function buildUtiLookup(client: RadClient, utis: RawUti[]): Promise<UtiLookup> {
+async function buildUtiLookup(
+  client: RadClient,
+  utis: RawUti[],
+  tests: TestDef[]
+): Promise<UtiLookup> {
   const byExactUrl = new Map<string, RawUti>();
   const byNormUrl = new Map<string, RawUti>();
   const byTestId = new Map<string, RawUti>();
   const bySlug = new Map<string, RawUti>();
 
-  const uniqueTestUrls = [...new Set(utis.map((u) => u.test))];
+  const uniqueTestUrls = new Set(utis.map((u) => u.test));
+  for (const t of tests) {
+    if (t.testUrl) uniqueTestUrls.add(t.testUrl);
+  }
+
   const slugByNorm = new Map<string, string>();
+  for (const t of tests) {
+    if (t.slug && t.testUrl) slugByNorm.set(normalizeApiUrl(t.testUrl), t.slug);
+  }
+
   await Promise.all(
-    uniqueTestUrls.map(async (url) => {
+    [...uniqueTestUrls].map(async (url) => {
+      if (slugByNorm.has(normalizeApiUrl(url))) return;
       try {
         const raw = await client.get<{ slug?: string }>(url);
         if (raw.slug) slugByNorm.set(normalizeApiUrl(url), raw.slug);
@@ -161,6 +228,40 @@ async function buildUtiLookup(client: RadClient, utis: RawUti[]): Promise<UtiLoo
   }
 
   return { byExactUrl, byNormUrl, byTestId, bySlug };
+}
+
+async function loadRefTolMaps(
+  client: RadClient,
+  utis: RawUti[]
+): Promise<{ refs: Map<string, RawRef>; tols: Map<string, RawTol> }> {
+  const refs = new Map<string, RawRef>();
+  const tols = new Map<string, RawTol>();
+  const refUrls = new Set<string>();
+  const tolUrls = new Set<string>();
+
+  for (const u of utis) {
+    if (typeof u.reference === 'string') refUrls.add(u.reference);
+    if (typeof u.tolerance === 'string') tolUrls.add(u.tolerance);
+  }
+
+  await Promise.all([
+    ...[...refUrls].map(async (url) => {
+      try {
+        refs.set(url, await client.get<RawRef>(url));
+      } catch {
+        // One broken link must not drop criteria for every other test.
+      }
+    }),
+    ...[...tolUrls].map(async (url) => {
+      try {
+        tols.set(url, await client.get<RawTol>(url));
+      } catch {
+        // Same rationale as references.
+      }
+    }),
+  ]);
+
+  return { refs, tols };
 }
 
 /**
@@ -186,29 +287,8 @@ export async function attachCriteria(
     });
   }
 
-  const lookup = await buildUtiLookup(client, utis);
-
-  const matched = withUrl
-    .map((t) => findUti(lookup, t.testUrl, t.slug))
-    .filter((u): u is RawUti => !!u);
-
-  const refUrls = new Set<string>();
-  const tolUrls = new Set<string>();
-  for (const u of matched) {
-    if (u.reference) refUrls.add(u.reference);
-    if (u.tolerance) tolUrls.add(u.tolerance);
-  }
-
-  const refs = new Map<string, RawRef>();
-  const tols = new Map<string, RawTol>();
-  await Promise.all([
-    ...[...refUrls].map(async (url) => {
-      refs.set(url, await client.get<RawRef>(url));
-    }),
-    ...[...tolUrls].map(async (url) => {
-      tols.set(url, await client.get<RawTol>(url));
-    }),
-  ]);
+  const lookup = await buildUtiLookup(client, utis, tests);
+  const { refs, tols } = await loadRefTolMaps(client, utis);
 
   return tests.map((t) => {
     if (!t.testUrl) return t;
@@ -221,4 +301,9 @@ export async function attachCriteria(
     const { testUrl: _drop, ...rest } = t;
     return criteria ? { ...rest, criteria } : rest;
   });
+}
+
+/** How many tests ended up with stored criteria — useful for download feedback. */
+export function countWithCriteria(tests: TestDef[]): number {
+  return tests.filter((t) => t.criteria).length;
 }

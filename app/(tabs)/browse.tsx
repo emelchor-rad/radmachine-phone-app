@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Button, FlatList, Pressable, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { attachCriteria } from '../../src/api/criteria';
+import { attachCriteria, countWithCriteria } from '../../src/api/criteria';
 import { attachCalculationProcedures } from '../../src/api/procedures';
 import { RadClient } from '../../src/api/client';
 import { flattenTestList } from '../../src/api/definitions';
@@ -130,12 +130,17 @@ export default function Catalogue() {
       );
       let tests = await attachCalculationProcedures(c, flatTests);
       const unitUrl = resolveUnitUrl(utc.unit, browsed.units);
+      let criteriaNote = '';
       if (unitUrl) {
         try {
           tests = await attachCriteria(c, unitUrl, tests);
-        } catch {
-          // Criteria are optional — tolerance hints only. A mismatched unit url
-          // or missing unittestinfo must not block downloading the list itself.
+          const n = countWithCriteria(tests);
+          if (n === 0 && tests.length > 0) {
+            criteriaNote =
+              ' (no ref/tol found for this unit — check Set References & Tolerances on RadMachine)';
+          }
+        } catch (e: any) {
+          criteriaNote = ` (ref/tol download failed: ${e?.message ?? e})`;
         }
       }
       await saveCollection(
@@ -155,7 +160,7 @@ export default function Catalogue() {
         : null;
       if (scheduleRow) await upsertScheduleRow(scheduleRow, browsed.fetchedAt);
       await loadDownloaded();
-      setMsg('');
+      setMsg(criteriaNote.trim());
       router.push('/downloaded');
     } catch (e: any) {
       setMsg(e.message);
