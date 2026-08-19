@@ -10,7 +10,6 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { PassFail } from '../../src/ui/PassFail';
 import { ReadOnlyField } from '../../src/ui/ReadOnlyField';
-import { CriteriaDisplay } from '../../src/ui/CriteriaDisplay';
 import { TestDetailsModal } from '../../src/ui/TestDetailsModal';
 import { getCollection, getTests, type Collection } from '../../src/db/collections';
 import { loadDraft, markCompleted, setValue } from '../../src/db/sessions';
@@ -310,7 +309,6 @@ export default function Worksheet() {
                   {t.name}
                 </Text>
               </Pressable>
-              <CriteriaDisplay criteria={t.criteria} compact />
               {levelLabel && levelColour && isOutOfTolerance(level) ? (
                 <StatusBadge label={levelLabel} colour={levelColour} />
               ) : null}
