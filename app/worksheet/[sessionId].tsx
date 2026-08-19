@@ -30,7 +30,13 @@ import {
   EVAL_LABEL,
 } from '../../src/qa/evaluate';
 import { recalculateComposites } from '../../src/qa/recalculate';
-import { isPyodideReady, pyodideBootError, runCompositeScript } from '../../src/qa/pyodide-bridge';
+import {
+  isPyodideReady,
+  pyodideBootError,
+  pyodideBootProgress,
+  runCompositeScript,
+  subscribePyodideStatus,
+} from '../../src/qa/pyodide-bridge';
 
 /** Everything the confirmation modal needs, frozen at the moment it opened. */
 type Pending = {
@@ -58,6 +64,9 @@ export default function Worksheet() {
   const [sending, setSending] = useState(false);
   const [computed, setComputed] = useState<Record<string, number | string | null>>({});
   const [compositeBlocked, setCompositeBlocked] = useState<Record<string, string>>({});
+  const [pyodideTick, setPyodideTick] = useState(0);
+
+  useEffect(() => subscribePyodideStatus(() => setPyodideTick((n) => n + 1)), []);
 
   useEffect(() => {
     (async () => {
@@ -83,6 +92,9 @@ export default function Worksheet() {
 
   useEffect(() => {
     if (!loaded || tests.length === 0) return;
+    if (tests.some((t) => isCompositeType(t.type)) && !isPyodideReady() && !pyodideBootError()) {
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -101,7 +113,7 @@ export default function Worksheet() {
     return () => {
       cancelled = true;
     };
-  }, [loaded, tests, values]);
+  }, [loaded, tests, values, pyodideTick]);
 
   const update = async (slug: string, v: DraftValue) => {
     setValues((prev) => ({ ...prev, [slug]: v }));
@@ -231,7 +243,12 @@ export default function Worksheet() {
           Python engine: {pyodideBootError()} — run npm run setup:pyodide and rebuild.
         </Text>
       ) : !isPyodideReady() && tests.some((t) => isCompositeType(t.type)) ? (
-        <Text style={{ color: '#555', fontSize: 12 }}>Starting Python engine…</Text>
+        <Text style={{ color: '#555', fontSize: 12 }}>
+          Starting Python engine…
+          {pyodideBootProgress() === 'loading-wasm'
+            ? ' compiling WASM (first start can take 1–2 min on phone)'
+            : ' please wait'}
+        </Text>
       ) : null}
 
       {tests.map((t) => {

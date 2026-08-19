@@ -6,11 +6,41 @@ type Pending = {
   reject: (e: Error) => void;
 };
 
+type StatusListener = () => void;
+
 let inject: ((js: string) => void) | null = null;
 let ready = false;
 let bootError: string | null = null;
+let bootProgress: string | null = null;
+let bootTimer: ReturnType<typeof setTimeout> | null = null;
 const pending = new Map<string, Pending>();
+const listeners = new Set<StatusListener>();
 let nextId = 1;
+
+const BOOT_TIMEOUT_MS = 120_000;
+
+function notifyStatus(): void {
+  for (const listener of listeners) listener();
+}
+
+function clearBootTimer(): void {
+  if (bootTimer) {
+    clearTimeout(bootTimer);
+    bootTimer = null;
+  }
+}
+
+/** Start a watchdog when the hidden WebView begins booting Pyodide. */
+export function startPyodideBootWatch(): void {
+  clearBootTimer();
+  bootTimer = setTimeout(() => {
+    if (!ready && !bootError) {
+      bootError =
+        'Python engine timed out after 2 minutes — close Expo Go fully, run npm run start:clean, and try again';
+      notifyStatus();
+    }
+  }, BOOT_TIMEOUT_MS);
+}
 
 /** Called by PyodideEngine when the WebView can execute JS. */
 export function registerPyodideInjector(fn: (js: string) => void): void {
@@ -21,6 +51,14 @@ export function unregisterPyodideInjector(): void {
   inject = null;
   ready = false;
   bootError = null;
+  bootProgress = null;
+  clearBootTimer();
+  notifyStatus();
+}
+
+export function subscribePyodideStatus(listener: StatusListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 /** Called by PyodideEngine when the WebView posts a message. */
@@ -32,14 +70,25 @@ export function handlePyodideMessage(raw: string): void {
     return;
   }
 
+  if (msg.type === 'boot-progress') {
+    bootProgress = msg.stage ?? null;
+    notifyStatus();
+    return;
+  }
   if (msg.type === 'ready') {
     ready = true;
     bootError = null;
+    bootProgress = null;
+    clearBootTimer();
+    notifyStatus();
     return;
   }
   if (msg.type === 'boot-error') {
     bootError = msg.message ?? 'Pyodide failed to start';
     ready = false;
+    bootProgress = null;
+    clearBootTimer();
+    notifyStatus();
     return;
   }
 
@@ -68,6 +117,10 @@ export function isPyodideReady(): boolean {
 
 export function pyodideBootError(): string | null {
   return bootError;
+}
+
+export function pyodideBootProgress(): string | null {
+  return bootProgress;
 }
 
 /**

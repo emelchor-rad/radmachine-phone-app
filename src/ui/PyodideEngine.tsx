@@ -7,6 +7,7 @@ import { buildPyodideRunnerHtml } from '../qa/pyodide-html';
 import {
   handlePyodideMessage,
   registerPyodideInjector,
+  startPyodideBootWatch,
   unregisterPyodideInjector,
 } from '../qa/pyodide-bridge';
 
@@ -23,7 +24,7 @@ const PYODIDE_FILES: { module: number; name: string }[] = [
 ];
 
 /** Bump when cache layout or runner HTML changes — forces a clean copy on device. */
-const PYODIDE_CACHE_VERSION = '3';
+const PYODIDE_CACHE_VERSION = '4';
 
 type PyodideSource = { uri: string };
 
@@ -72,9 +73,19 @@ async function preparePyodideSource(): Promise<PyodideSource> {
   return { uri: toFileUri(htmlPath) };
 }
 
+const BOOT_INJECT = `
+(function () {
+  if (window.__radmachineBoot) window.__radmachineBoot();
+})();
+true;
+`;
+
 /**
  * Hidden WebView that boots Pyodide from app-bundled assets — no CDN, works in
  * airplane mode (bunker) from the first worksheet open after install.
+ *
+ * Android throttles or skips work in 0×0 WebViews, so keep a small off-screen
+ * surface while WASM compiles (can take 30–90 s on a phone).
  */
 export function PyodideEngine() {
   const ref = useRef<WebView>(null);
@@ -103,7 +114,10 @@ export function PyodideEngine() {
   if (!source) return null;
 
   return (
-    <View style={{ width: 0, height: 0, opacity: 0 }} pointerEvents="none">
+    <View
+      style={{ position: 'absolute', top: -500, left: 0, width: 100, height: 100, opacity: 0.01 }}
+      pointerEvents="none"
+    >
       <WebView
         ref={ref}
         source={{ uri: source.uri }}
@@ -112,8 +126,10 @@ export function PyodideEngine() {
         allowFileAccessFromFileURLs
         allowUniversalAccessFromFileURLs
         mixedContentMode="always"
+        onLoadStart={() => startPyodideBootWatch()}
         onLoadEnd={() => {
           registerPyodideInjector((js) => ref.current?.injectJavaScript(js));
+          ref.current?.injectJavaScript(BOOT_INJECT);
         }}
         onMessage={(e) => handlePyodideMessage(e.nativeEvent.data)}
         onError={() =>
@@ -130,7 +146,7 @@ export function PyodideEngine() {
         domStorageEnabled
         cacheEnabled={false}
         scrollEnabled={false}
-        {...(Platform.OS === 'android' ? { androidLayerType: 'hardware' as const } : {})}
+        {...(Platform.OS === 'android' ? { androidLayerType: 'software' as const } : {})}
       />
     </View>
   );

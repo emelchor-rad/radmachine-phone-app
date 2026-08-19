@@ -4,6 +4,7 @@ test('buildPyodideRunnerHtml inlines pyodide.js and boot script', () => {
   const html = buildPyodideRunnerHtml('var loadPyodide = () => {};');
   expect(html).toContain('var loadPyodide = () => {}');
   expect(html).toContain('window.__radmachineRun');
+  expect(html).toContain('window.__radmachineBoot');
   expect(html).not.toContain('<script src="pyodide.js">');
 });
 

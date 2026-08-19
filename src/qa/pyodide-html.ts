@@ -4,7 +4,16 @@ const RUNNER_BOOT_SCRIPT = `
   let bootPromise = null;
 
   function post(obj) {
+    if (!window.ReactNativeWebView || !window.ReactNativeWebView.postMessage) {
+      throw new Error('ReactNativeWebView bridge not ready');
+    }
     window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+  }
+
+  function indexUrl() {
+    const href = window.location.href.split('#')[0].split('?')[0];
+    const i = href.lastIndexOf('/');
+    return i >= 0 ? href.slice(0, i + 1) : './';
   }
 
   async function ensurePyodide() {
@@ -14,7 +23,8 @@ const RUNNER_BOOT_SCRIPT = `
       throw new Error('loadPyodide is not defined — pyodide.js did not load');
     }
     if (!bootPromise) {
-      bootPromise = loadFn({ indexURL: './' });
+      post({ type: 'boot-progress', stage: 'loading-wasm' });
+      bootPromise = loadFn({ indexURL: indexUrl(), fullStdLib: false });
     }
     pyodide = await bootPromise;
     return pyodide;
@@ -22,12 +32,15 @@ const RUNNER_BOOT_SCRIPT = `
 
   async function boot() {
     try {
+      post({ type: 'boot-progress', stage: 'starting' });
       await ensurePyodide();
       post({ type: 'ready' });
     } catch (e) {
       post({ type: 'boot-error', message: String(e) });
     }
   }
+
+  window.__radmachineBoot = boot;
 
   window.__radmachineRun = async function(payloadJson) {
     const { id, script } = JSON.parse(payloadJson);
@@ -45,8 +58,6 @@ const RUNNER_BOOT_SCRIPT = `
       post({ type: 'error', id, message: String(e) });
     }
   };
-
-  boot();
 `;
 
 /** Prevent inline script termination if pyodide.js ever contains a closing tag. */
@@ -57,9 +68,8 @@ function escapeForInlineScript(js: string): string {
 /**
  * Build WebView HTML with pyodide.js inlined.
  *
- * Android WebView blocks external &lt;script src&gt; from file:// when the page
- * is loaded via source={{ html }}. Inlining the ~15 KB loader fixes
- * "loadPyodide is not defined".
+ * Boot is triggered from React Native onLoadEnd so the WebView bridge exists
+ * and the view has non-zero dimensions before WASM compilation starts.
  */
 export function buildPyodideRunnerHtml(pyodideJs: string): string {
   return `<!DOCTYPE html>
