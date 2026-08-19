@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { CriteriaBandValues, CriteriaDisplay as CriteriaModel } from '../qa/evaluate';
-import { criteriaDisplay } from '../qa/evaluate';
+import { bandsAreCrowded, criteriaDisplay } from '../qa/evaluate';
 import type { TestCriteria } from '../api/types';
 import { RADMACHINE_BLUE } from './theme';
 
@@ -84,13 +84,15 @@ function ScalePoint({
   label,
   kind,
   value,
+  flex = 1,
 }: {
   label: string;
   kind: PointKind;
   value: string;
+  flex?: number;
 }) {
   return (
-    <View style={{ flex: 1, alignItems: 'center', gap: 5 }}>
+    <View style={{ flex, alignItems: 'center', gap: 5 }}>
       <Text style={{ fontSize: 11, color: MUTED, textAlign: 'center' }}>{label}</Text>
       <View style={{ width: 1, height: 10, backgroundColor: '#bbb' }} />
       <ThresholdBadge kind={kind} value={value} />
@@ -98,8 +100,69 @@ function ScalePoint({
   );
 }
 
+type ScalePointDef = { label: string; kind: PointKind; value: string };
+
+function ScaleRow({ points }: { points: ScalePointDef[] }) {
+  const visible = points.filter((p) => p.value !== '');
+  if (visible.length === 0) return null;
+  return (
+    <View style={{ paddingVertical: 4, position: 'relative' }}>
+      <View
+        style={{
+          position: 'absolute',
+          left: '8%',
+          right: '8%',
+          top: 22,
+          height: 1,
+          backgroundColor: '#ccc',
+        }}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        {visible.map((p, i) => (
+          <ScalePoint key={`${p.label}-${p.value}-${i}`} label={p.label} kind={p.kind} value={p.value} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function SplitRadMachineScale({ bands }: { bands: CriteriaBandValues }) {
+  const { actLow, tolLow, ref, tolHigh, actHigh } = bands;
+  const refStr = fmtRef(ref);
+  return (
+    <View style={{ gap: 14 }}>
+      <ScaleRow
+        points={[
+          ...(actLow !== null
+            ? [{ label: 'Action', kind: 'action' as const, value: fmtBand(actLow) }]
+            : []),
+          ...(tolLow !== null
+            ? [{ label: 'Tolerance', kind: 'tolerance' as const, value: fmtBand(tolLow) }]
+            : []),
+          { label: 'Reference', kind: 'reference', value: refStr },
+        ]}
+      />
+      <ScaleRow
+        points={[
+          { label: 'Reference', kind: 'reference', value: refStr },
+          ...(tolHigh !== null
+            ? [{ label: 'Tolerance', kind: 'tolerance' as const, value: fmtBand(tolHigh) }]
+            : []),
+          ...(actHigh !== null
+            ? [{ label: 'Action', kind: 'action' as const, value: fmtBand(actHigh) }]
+            : []),
+        ]}
+      />
+    </View>
+  );
+}
+
 /** RadMachine web-style horizontal ref/tol/action scale. */
 function RadMachineScale({ bands }: { bands: CriteriaBandValues }) {
+  if (bandsAreCrowded(bands)) {
+    return <SplitRadMachineScale bands={bands} />;
+  }
+
   const { actLow, tolLow, ref, tolHigh, actHigh } = bands;
   const points: { label: string; kind: PointKind; value: number | null; fmt: (n: number) => string }[] =
     [

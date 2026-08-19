@@ -148,6 +148,22 @@ export type CriteriaBandValues = {
   actHigh: number | null;
 };
 
+/** True when five threshold values would crowd on a phone screen. */
+export function bandsAreCrowded(bands: CriteriaBandValues): boolean {
+  const { actLow, actHigh, tolLow, tolHigh, ref } = bands;
+  if (actLow === null || actHigh === null || tolLow === null || tolHigh === null) return false;
+  const span = actHigh - actLow;
+  if (span <= 0) return false;
+  const refMag = Math.max(Math.abs(ref), 1);
+  if (span <= 25) return true;
+  if (span / refMag <= 0.2) return true;
+  const sorted = [actLow, tolLow, ref, tolHigh, actHigh].sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] - sorted[i - 1] <= 3) return true;
+  }
+  return false;
+}
+
 export type CriteriaDisplay =
   | { kind: 'none' }
   | { kind: 'boolean'; refLabel: 'Pass' | 'Fail' }

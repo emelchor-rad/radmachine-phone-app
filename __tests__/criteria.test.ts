@@ -55,6 +55,20 @@ test('criteriaFromUti accepts embedded reference and tolerance objects', () => {
   expect(c).toMatchObject({ refValue: 50, tolType: 'absolute', tolLow: -2, actHigh: 5 });
 });
 
+test('bandsAreCrowded is true for a tight band like 45–55 around ref 50', () => {
+  const { bandsAreCrowded } = require('../src/qa/evaluate');
+  expect(
+    bandsAreCrowded({ actLow: 45, tolLow: 48, ref: 50, tolHigh: 52, actHigh: 55 })
+  ).toBe(true);
+});
+
+test('bandsAreCrowded is false for a wide band', () => {
+  const { bandsAreCrowded } = require('../src/qa/evaluate');
+  expect(
+    bandsAreCrowded({ actLow: 80, tolLow: 90, ref: 100, tolHigh: 110, actHigh: 120 })
+  ).toBe(false);
+});
+
 test('utiMatchesListTest matches by normalized url or test id', () => {
   const uti = {
     test: `${BASE}/qa/tests/99/`,
