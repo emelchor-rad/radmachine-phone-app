@@ -362,13 +362,17 @@ export default function Downloaded() {
                     : 'Done, waiting to send'}
                 </Text>
               ) : null}
-              {/* Resume, not a second session: two sessions on one list split
-                  the readings, and only one of them gets submitted. */}
               {draft ? (
-                <Button
-                  title="Resume session"
-                  onPress={() => router.push(`/worksheet/${draft.id}`)}
-                />
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  <Button
+                    title="Resume session"
+                    onPress={() => router.push(`/worksheet/${draft.id}`)}
+                  />
+                  <Button
+                    title="Start new session"
+                    onPress={() => startSession(item.utcUrl)}
+                  />
+                </View>
               ) : (
                 <Button title="Start session" onPress={() => startSession(item.utcUrl)} />
               )}
