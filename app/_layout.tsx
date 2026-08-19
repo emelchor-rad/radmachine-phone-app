@@ -3,7 +3,6 @@ import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Stack } from 'expo-router';
 import { ErrorBoundary } from '../src/ui/ErrorBoundary';
-import { PyodideEngine } from '../src/ui/PyodideEngine';
 import { drainOutbox } from '../src/sync/drain';
 import { refreshSchedule } from '../src/sync/refresh';
 
@@ -33,7 +32,6 @@ export default function Layout() {
 
   return (
     <ErrorBoundary>
-      <PyodideEngine />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ title: 'Connection' }} />
